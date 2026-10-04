@@ -4,7 +4,6 @@ import pymongo
 
 #include rocky
 
-
 MONGODB_URI = os.getenv("MONGODB_URI")
 mongo_client = pymongo.MongoClient(MONGODB_URI) if MONGODB_URI else None
 mongo_database = (
