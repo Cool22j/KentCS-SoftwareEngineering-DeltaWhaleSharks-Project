@@ -1,6 +1,4 @@
-"""
-database.py - saves and loads decks using MongoDB.
-"""
+
 
 import os
 import uuid
