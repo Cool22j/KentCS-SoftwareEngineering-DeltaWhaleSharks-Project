@@ -1,26 +1,9 @@
 import streamlit as st
-import os
 import pymongo
 
+import database as db
+
 #include rocky
-
-MONGODB_URI = os.getenv("MONGODB_URI")
-mongo_client = pymongo.MongoClient(MONGODB_URI) if MONGODB_URI else None
-mongo_database = (
-    mongo_client["Magic_Cards"] if mongo_client is not None else None
-)
-mongo_collection = (
-    mongo_database["Magic_Card_Collection"]
-    if mongo_database is not None
-    else None
-)
-
-
-def save_deck_to_mongodb(deck):
-    """Save a generated deck when a MongoDB URI is configured."""
-    if mongo_collection is None:
-        raise RuntimeError("MONGODB_URI is not configured")
-    return mongo_collection.insert_one(deck)
 
 
 st.title("MTG Deck Builder")
@@ -28,9 +11,11 @@ st.title("MTG Deck Builder")
 st.write("Create a Magic: The Gathering deck using Rocky.")
 
 
+deck_name = st.text_input("Deck Name")
+
 colors = st.text_input("Colors")
 
-format = st.selectbox(
+deck_format = st.selectbox(
     "Format",
     ["Standard", "Modern", "Commander", "Pioneer", "Legacy", "Vintage"]
 )
@@ -48,9 +33,11 @@ if st.button("Generate Deck"):
     else:
         with st.spinner("Generating deck..."):
             st.session_state["deck"] = {
+                "name": deck_name or "Untitled Deck",
                 "colors": colors,
-                "format": format,
+                "format": deck_format,
                 "strategy": strategy,
+                "cards": [],  # TODO: generate actual cards
             }
 
 if "deck" in st.session_state:
@@ -59,8 +46,16 @@ if "deck" in st.session_state:
 
     if st.button("Save Deck"):
         try:
-            save_deck_to_mongodb(st.session_state["deck"])
+            deck = st.session_state["deck"]
+            db.save_deck(
+                name=deck["name"],
+                deck_format=deck["format"],
+                colors=deck["colors"],
+                strategy=deck["strategy"],
+                deck_cards=deck.get("cards", []),
+                user_id=st.session_state.get("user_id"),
+            )
         except (pymongo.errors.PyMongoError, RuntimeError) as error:
             st.error(f"Could not save deck to MongoDB: {error}")
         else:
-            st.success("Deck saved!")
+            st.success("Deck saved!")
