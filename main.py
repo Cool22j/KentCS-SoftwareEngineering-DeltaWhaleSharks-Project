@@ -21,7 +21,7 @@ rules = st.Page(
 
 #create navigation bar
 nv = st.navigation(
-    [rules, deckBuilder, deckInventory],
+    [landing, rules, deckBuilder, deckInventory],
     position = "top"
 )
 nv.run()
