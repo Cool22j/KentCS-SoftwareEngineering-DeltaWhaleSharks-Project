@@ -2,17 +2,25 @@ import streamlit as st
 
 
 #declare pages
+landing = st.Page(
+    "landing.py",
+    title = "Home",
+    icon = ":material/home:",
+    default = True
+)
+
 deckBuilder = st.Page(
     "app.py",
     title = "Deck Builder",
     icon = ":material/build:",
-    default = True
 )
+
 deckInventory = st.Page(
     "inventory.py",
     title = "Deck Inventory",
     icon = ":material/favorite:"
 )
+
 rules = st.Page(
     "rules.py",
     title = "Rules",
