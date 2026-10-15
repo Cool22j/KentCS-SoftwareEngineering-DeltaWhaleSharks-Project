@@ -1,8 +1,3 @@
-"""Import English Scryfall printings into Magic_Cards.cards.
-
-Run with: python3 get_card_data.py
-"""
-
 import gzip
 import json
 import os
