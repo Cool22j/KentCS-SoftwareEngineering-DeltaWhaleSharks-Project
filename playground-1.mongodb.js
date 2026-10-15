@@ -3,13 +3,18 @@
 // Use Ctrl+Space inside a snippet or a string literal to trigger completions.
 
 const database = "Magic_Cards";
-const collection = 'Magic_Card_Collection';
+const collection1 = 'cards';
+const collection2 = 'decks';
 
 // Create a new database.
 use(database);
 
-// Create a new collection.
-db.createCollection(collection);
+// Create both collections if they do not already exist.
+for (const collection of [collection1, collection2]) {
+  if (!db.getCollectionNames().includes(collection)) {
+    db.createCollection(collection);
+  }
+}
 
 // The prototype form to create a collection:
 /* db.createCollection( <name>,
