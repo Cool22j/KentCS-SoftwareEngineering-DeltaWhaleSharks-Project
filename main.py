@@ -27,9 +27,15 @@ rules = st.Page(
     icon = ":material/menu_book:"
 )
 
+beginner = st.Page(
+    "beginner.py",
+    title = "Beginner's Guide",
+    icon = ":material/school:"
+)
+
 #create navigation bar
 nv = st.navigation(
-    [landing, rules, deckBuilder, deckInventory],
+    [landing, rules, beginner, deckBuilder, deckInventory],
     position = "top"
 )
 nv.run()
