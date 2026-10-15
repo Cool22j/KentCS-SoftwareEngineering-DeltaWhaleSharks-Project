@@ -33,3 +33,76 @@ if query:
     # So on user search, it would search for the item(s) matching the user's input and selected category from database
     # I added 'pass' so there is no error when the code is ran, but it WILL get replaced when the real logic is implemented
     pass
+
+# The code below creates that grid of shortcuts to navigate to the main features of our app.
+st.divider()
+
+st.markdown(
+    "<h3 style='text-align: center;'>Jump right into Card Shark!</h3>",
+    unsafe_allow_html = True
+)
+
+# Styles the shortcut cards to keep their size consistent; will add color later on
+st.markdown("""
+
+<style>
+.shortcut-box {
+    height: 210px;
+    border: 1px solid rgba(128, 128, 128, 0.35);
+    border-radius: 12px;
+    padding: 18px 12px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-sizing: border-box;
+}
+.shortcut-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+}
+.shortcut-title {
+    font-size: 19px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.shortcut-description {
+    font-size: 14px;
+    opacity: 0.8;
+    min-height: 36px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# This helps make the 2x2 grid for the shortcuts
+col1, col2 = st.columns(2)
+
+# Makes the left column
+with col1:
+    with st.container(border = True):
+        st.markdown("### Build a Deck")
+        st.caption("Create a new Magic Deck")
+        if st.button("Open Deck Builder", key = "shortcut_builder", use_container_width = True):
+            st.switch_page("app.py")
+
+    with st.container(border=True):
+        st.markdown("### Game Rules")
+        st.caption("Look up Magic rules.")
+        if st.button("Read Rules", key="shortcut_rules", use_container_width = True):
+            st.switch_page("rules.py")
+
+# Makes the right column
+with col2:
+    with st.container(border = True):
+        st.markdown("### My Decks")
+        st.caption("View and manage saved decks")
+        if st.button("View My Decks", key = "shortcut_inventory", use_container_width = True):
+            st.switch_page("inventory.py")
+
+    with st.container(border = True):
+        st.markdown("### Beginner's Guide")
+        st.caption("Learn the basics of MTG and deck building.")
+        if st.button("Get Started", key="shortcut_beginner", use_container_width = True):
+            st.switch_page("beginner.py")
