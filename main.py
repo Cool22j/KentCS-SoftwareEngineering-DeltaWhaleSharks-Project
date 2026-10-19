@@ -33,6 +33,8 @@ beginner = st.Page(
     icon = ":material/school:"
 )
 
+st.logo("logo.png", size = "large")
+
 #create navigation bar
 nv = st.navigation(
     [landing, rules, beginner, deckBuilder, deckInventory],
