@@ -5,6 +5,7 @@ import database as db
 
 st.title("Your Decks:")
 
+
 try:
     decks = db.get_decks(st.session_state.get("user_id"))
 except (pymongo.errors.PyMongoError, RuntimeError) as error:
@@ -15,6 +16,15 @@ if not decks:
     st.info("No saved decks yet. Build one on the Deck Builder page!")
 
 for deck in decks:
+    st.markdown("""
+    <style>
+    div[data-testid="stExpander"] {
+        border-radius: 20px;
+        margin-bottom: 8px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     card_count = sum(card["qty"] for card in deck["cards"])
     with st.expander(f"{deck['name']}  ·  {deck['format']}  ·  {card_count} cards"):
         st.write(f"**Colors:** {deck['colors']}")
