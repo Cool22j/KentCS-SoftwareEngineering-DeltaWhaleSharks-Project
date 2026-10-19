@@ -113,7 +113,7 @@ if __name__ == "__main__":
     while True:
         question = input("You: ").strip()
 
-        if question.lower() in ("exit", "quit"):
+        if question.lower() in ("exit", "quit", "leave"):
             print("Rocky: See you next time!")
             break
 
