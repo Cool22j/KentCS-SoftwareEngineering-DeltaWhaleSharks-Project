@@ -146,7 +146,7 @@ with col1:
 
     with st.container(border=True):
         st.markdown("### Game Rules")
-        st.caption("Look up Magic rules.")
+        st.caption("Look up MTG rules.")
         if st.button("Read Rules", key = "shortcut_rules", use_container_width = True):
             st.switch_page("rules.py")
 
