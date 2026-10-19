@@ -113,6 +113,8 @@ if __name__ == "__main__":
     while True:
         question = input("You: ").strip()
 
+        # Sometimes the user isn't that smart or just isn't paying attention, 
+        # so I added 'quit' and 'leave' to exit the conversation as well. 
         if question.lower() in ("exit", "quit", "leave"):
             print("Rocky: See you next time!")
             break

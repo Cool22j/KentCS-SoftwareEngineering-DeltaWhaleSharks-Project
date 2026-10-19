@@ -33,7 +33,7 @@ Set `ROCKY_API_KEY` in `.env`, then run `python3 rocky.py`.
 
 Set `ROCKY_API_KEY` in `.env`, then run `python3 rocky.py`.
 
-Type `exit` or `quit` to finish the conversation.
+Type `exit`, `quit` or `leave` to finish the conversation.
 
 The script retrieves the available Rocky model automatically through the 
 `/v1/models` endpoint and uses it to answer questions through the 
