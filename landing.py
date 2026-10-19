@@ -1,10 +1,7 @@
 import streamlit as st
 
 # Creates the main title "Card Shark"
-st.markdown( 
-    """<h1 style="text-align: center; letter-spacing: 10px; font-size: 60px"> CARD SHARK </h1>""",
-    unsafe_allow_html=True
-)
+st.image("logo.png")
 
 # This displays the text underneath Card Shark
 st.markdown(
