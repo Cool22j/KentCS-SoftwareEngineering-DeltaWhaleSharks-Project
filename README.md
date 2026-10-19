@@ -35,10 +35,19 @@ Set `ROCKY_API_KEY` in `.env`, then run `python3 rocky.py`.
 
 Type `exit` or `quit` to finish the conversation.
 
-The script retrieves the available Rocky model automatically through the `/v1/models` endpoint and uses it to answer questions through the `/v1/responses` endpoint.
+The script retrieves the available Rocky model automatically through the 
+`/v1/models` endpoint and uses it to answer questions through the 
+`/v1/responses` endpoint.
 
-The script queries `Magic_Cards.Cards` using MongoDB filters defined in `rocky.py`. By default, it selects up to 5 English card printings that are legal in Modern, are red creatures, and have a mana value (`cmc`) of 3 or less. Results are sorted alphabetically by name.
+The script queries `Magic_Cards.Cards` using MongoDB filters defined in
+`rocky.py`. By default, it selects up to 5 English card printings that are 
+legal in Modern, are red creatures, and have a mana value (`cmc`) of 3 or 
+less. Results are sorted alphabetically by name.
 
-Only the fields listed in `CARD_FIELDS` are sent to Rocky. Rocky uses this data to answer questions about the selected cards. Since the script sends a limited sample of cards, its answers may not represent every card in the database.
+Only the fields listed in `CARD_FIELDS` are sent to Rocky. Rocky uses this 
+data to answer questions about the selected cards. Since the script sends a 
+limited sample of cards, its answers may not represent every card in the 
+database.
 
-To change which cards are retrieved, edit the `query` dictionary in `rocky.py`. To change the maximum number of cards retrieved, edit `CARD_LIMIT`.
+To change which cards are retrieved, edit the `query` dictionary in `rocky.
+py`. To change the maximum number of cards retrieved, edit `CARD_LIMIT`.
