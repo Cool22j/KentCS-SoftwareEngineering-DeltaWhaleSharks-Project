@@ -31,8 +31,6 @@ same command; completed batches remain saved.
 
 Set `ROCKY_API_KEY` in `.env`, then run `python3 rocky.py`.
 
-Set `ROCKY_API_KEY` in `.env`, then run `python3 rocky.py`.
-
 Type `exit`, `quit` or `leave` to finish the conversation.
 
 The script retrieves the available Rocky model automatically through the 
