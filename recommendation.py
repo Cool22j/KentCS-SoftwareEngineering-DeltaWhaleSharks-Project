@@ -35,16 +35,12 @@ def query_from_filters(format=None, colors=None, card_type=None, max_mana_cost=N
     known_formats = {"commander", "legacy", "modern", "pauper", "pioneer", "standard", "vintage"}
     if format and format.lower() in known_formats:
         query[f"legalities.{format.lower()}"] = "legal" 
-
     if colors:
         query["color_identity"] = {"$not": {"$elemMatch": {"$nin": colors}}}
-
     if card_type:
         query["type_line"] = {"$regex": card_type.strip(), "$options": "i"}
-
     if max_mana_cost is not None:
-        query["cmc"] = {"$lte": float(max_mana_cost)}  
-
+        query["cmc"] = {"$lte": int(max_mana_cost)}  
     return query
 
 
@@ -62,25 +58,21 @@ def query_from_deck(deck_id):
     )
 
 def _get_rocky_client():
-    api_key = os.getenv("RoKEY")  # key go here
+    api_key = os.getenv("RocKEY")  # key go here
     if not api_key:
-        raise RuntimeError("ROCKY_API_KEY is not set in your .env file.")
+        raise RuntimeError("RocKEY is not set in your .env file.")
     headers = {"Authorization": f"Bearer {api_key}"}
     model = get_model(headers)
     return model, headers
 
-
 def get_recommendations(question, format=None, colors=None, card_type=None, max_mana_cost=None, deck_id=None): 
     model, headers = _get_rocky_client()
-
     query = query_from_deck(deck_id) if deck_id else query_from_filters(format=format, colors=colors, card_type=card_type, max_mana_cost=max_mana_cost)
     cards = _fetch(query)
     return ask_rocky(question, cards, model, headers)
 
-
 if __name__ == "__main__":
     import argparse
-
     parser = argparse.ArgumentParser(description="Ask Rocky for card recommendations.")
     parser.add_argument("--format",       default="modern",  dest="format") 
     parser.add_argument("--colors",       default="",        help="Comma-separated, e.g. R,G")
@@ -88,11 +80,9 @@ if __name__ == "__main__":
     parser.add_argument("--max-mana-cost", default=None,     type=float)  
     parser.add_argument("--deck-id",      default=None)
     args = parser.parse_args()
-
     colors = [c.strip().upper() for c in args.colors.split(",") if c.strip()]
 
     model, headers = _get_rocky_client()
-
     query = (
         query_from_deck(args.deck_id) if args.deck_id
         else query_from_filters(
