@@ -12,20 +12,13 @@ st.markdown(
 )
 
 
-# This displays the horizonatal category selection above the search box
-search_type = st.segmented_control(
-    "Search by",
-    ["Cards", "Decks", "Users"],
-    default = "Cards",
-    selection_mode = "single"
-)
-
-
 # This part displays the search bar but doesn't do any searching 
 # since there's no search logic to search the database yet.
+st.text("Search for MTG Cards")
+
 query = st.text_input(
-    "",
-    placeholder = f"Search {search_type.lower()}...",
+    "Search Cards",
+    placeholder = "Enter a card name...",
     label_visibility = "collapsed"
 )
 
