@@ -29,13 +29,34 @@ CARD_FIELDS = (
     "colors", "color_identity", "power", "toughness", "loyalty",
     "legalities", "card_faces", "image_uris", "prices",
 )
-CARD_LIMIT = 80
+CARD_LIMIT = 200
+ROCKY_CARD_LIMIT = 20
 
 #mongo
 def _base_projection():
     proj = {field: 1 for field in CARD_FIELDS}
     proj["_id"] = 0
     return proj
+    
+# keyword score section - standard (look at bm25retriever in langchain community [adds an install])
+# word filter (reduce cards for rocky)
+def _score_cards(question, cards, numb_cards=ROCKY_CARD_LIMIT):
+    keywords = [
+        word for word in question.lower().split()
+        if len(word) > 0
+    ]
+    if not keywords:
+        return cards[:numb_cards]
+
+    def score(card):
+        text = (
+            (card.get("oracle_text") or "") + " " +
+            (card.get("type_line")   or "") + " " +
+            (card.get("name")        or "")
+        ).lower()
+        return sum(1 for word in keywords if word in text)
+    scored = sorted(cards, key=score, reverse=True)
+    return scored[:numb_cards]
 
 # lang chain doc for it to read
 def _cards_to_documents(cards):
