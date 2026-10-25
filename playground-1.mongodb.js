@@ -3,7 +3,7 @@
 // Use Ctrl+Space inside a snippet or a string literal to trigger completions.
 
 const database = "Magic_Cards";
-const collection1 = 'cards';
+const collection1 = 'Cards';
 const collection2 = 'decks';
 
 // Create a new database.

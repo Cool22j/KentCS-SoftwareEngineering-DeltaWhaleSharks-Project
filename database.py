@@ -32,13 +32,15 @@ def get_cards_collection():
     return get_database()["Cards"]
 
 
-def search_cards(name="", limit=20):
-    """Find English printings by part of their name, alphabetically."""
+def search_cards(name="", limit=20, card_type=""):
+    """Find English printings by part of their name or type, alphabetically."""
     if not isinstance(limit, int) or not 1 <= limit <= 5000:
         raise ValueError("limit must be an integer between 1 and 5000")
     query = {"lang": "en"}
     if name.strip():
         query["name"] = {"$regex": re.escape(name.strip()), "$options": "i"}
+    if card_type.strip():
+        query["type_line"] = {"$regex": re.escape(card_type.strip()), "$options": "i"}
     return list(get_cards_collection().find(query).sort("name", 1).limit(limit))
 
 

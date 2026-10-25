@@ -3,4 +3,4 @@ pymongo
 python-dotenv
 ijson
 requests
-langchain
+langchain-core

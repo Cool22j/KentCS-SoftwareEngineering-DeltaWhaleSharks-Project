@@ -56,11 +56,7 @@ if query.strip():
         if search_mode == "By Name":
             results = db.search_cards(query, limit = 100)
         else:
-            results = db.search_cards("", limit = 5000)
-
-            results = [
-                card for card in results
-                if card_type.lower() in card.get("type_line", "").lower()][:100]
+            results = db.search_cards("", limit = 200, card_type = card_type)
 
         # Keep only one result for each card name.
         unique_cards = {}
