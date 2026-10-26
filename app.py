@@ -3,6 +3,31 @@ import pymongo
 import requests
 import database as db
 from recommendation import get_recommendations
+import streamlit.components.v1 as components
+import base64
+from pathlib import Path
+
+
+# Function to display the looping loading animation
+def loading():
+    video_path = Path(__file__).parent / "0000-0018.mp4"
+    video_data = base64.b64encode(video_path.read_bytes()).decode("utf-8")
+
+    components.html(
+        f"""
+        <div style="display:flex; justify-content:center;">
+            <video autoplay loop playsinline
+                   style="width:220px; max-width:100%;">
+                <source
+                    src="data:video/mp4;base64,{video_data}"
+                    type="video/mp4">
+            </video>
+        </div>
+        """,
+        height=180,
+    )
+
+    
 
 st.title("MTG Deck Builder")
 st.write("Create a Magic: The Gathering deck using Card Shark.")
@@ -35,15 +60,18 @@ if st.button("Generate Deck"):
     if not strategy.strip():
         st.warning("Please enter a deck strategy")
     else:
+        loader = st.empty()
+        progress = st.empty()
         try:
-            progress = st.empty()
-            with st.spinner("Searching MongoDB and building your deck…"):
-                result = get_recommendations(
-                    strategy,
-                    format=deck_format,
-                    colors=colors,
-                    progress=progress.info,
-                )
+            with loader.container():
+                loading()
+           
+            result = get_recommendations(
+                strategy,
+                format=deck_format,
+                colors=colors,
+                progress=progress.info,
+            )
             progress.empty()
             st.session_state["deck"] = {
                 "name": deck_name.strip() or "Untitled Deck",
@@ -57,6 +85,8 @@ if st.button("Generate Deck"):
         except (ValueError, RuntimeError, requests.RequestException, pymongo.errors.PyMongoError) as error:
             progress.empty()
             st.error(f"Could not generate deck: {error}")
+        loader.empty()
+        progress.empty()
 
 # Show the deck after it is created
 if st.session_state["deck"] is not None:
