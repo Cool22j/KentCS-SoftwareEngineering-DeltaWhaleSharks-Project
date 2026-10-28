@@ -33,12 +33,17 @@ beginner = st.Page(
     icon = ":material/school:"
 )
 
+account = st.Page(
+    "login.py",
+    title = "Account",
+    icon = ":material/person:"
+)
+
 st.logo("logo.png", size = "large")
 
 #create navigation bar
 nv = st.navigation(
-    [landing, rules, beginner, deckBuilder, deckInventory],
+    [landing, rules, beginner, deckBuilder, deckInventory, account],
     position = "top"
 )
 nv.run()
-

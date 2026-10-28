@@ -1,7 +1,7 @@
 import streamlit as st
 import pymongo
 import requests
-import database as db
+import user_database as udb
 from recommendation import get_recommendations
 import streamlit.components.v1 as components
 import base64
@@ -177,19 +177,38 @@ if st.session_state["deck"] is not None:
                 st.rerun()
 
     # Save the deck to MongoDB
-    if st.button("Save Deck"):
+    user_id = st.session_state.get("user_id")
+
+    if not user_id:
+        st.info("Log in to save this deck to your account.")
+        st.page_link("login.py", label="Log In / Register", icon=":material/person:")
+
+    if st.button("Save Deck", disabled=not user_id):
         if len(cards) == 0:
             st.warning("Add some cards before saving")
         else:
             try:
-                db.save_deck(
+                # If this deck was already saved, update it instead of creating a duplicate.
+                updated = deck.get("saved_id") and udb.update_deck(
+                    deck["saved_id"],
+                    user_id,
                     name=deck["name"],
                     deck_format=deck["format"],
                     colors=deck["colors"],
                     strategy=deck["strategy"],
                     deck_cards=cards,
-                    user_id=st.session_state.get("user_id"),
                 )
-                st.success("Deck saved successfully!")
+                if updated:
+                    st.success("Deck updated!")
+                else:
+                    deck["saved_id"] = udb.save_deck(
+                        name=deck["name"],
+                        deck_format=deck["format"],
+                        colors=deck["colors"],
+                        strategy=deck["strategy"],
+                        deck_cards=cards,
+                        user_id=user_id,
+                    )
+                    st.success("Deck saved successfully!")
             except (pymongo.errors.PyMongoError, RuntimeError, ValueError) as error:
                 st.error(f"Could not save deck: {error}")

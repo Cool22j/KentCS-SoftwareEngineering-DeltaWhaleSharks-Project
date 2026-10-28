@@ -355,18 +355,21 @@ st.markdown(
     unsafe_allow_html = True
 )
 
-# This section displays the Register button and the Log In link for existing users.
-# Both are placeholders until the registration and login functionality is implemented.
+# This section shows the account buttons: Register / Log In, or the signed-in user.
 col1, col2, col3 = st.columns([1, 2, 1])
 
 with col2:
-    if st.button("Register Now", use_container_width = True):
-        st.info("Registration page is going to be implemented sometime soon.")
-
-st.markdown(
-    "<p style = 'text-align: center; font-size: 13px; margin-top: 8px;'>"
-    "Already have an account? "
-    "<a href = '#' style = 'text-decoration: underline;'>Log In</a>"
-    "</p>",
-    unsafe_allow_html = True
-)
+    if st.session_state.get("user_id"):
+        st.success(f"Signed in as {st.session_state.get('username', 'user')}")
+        if st.button("Manage Account", use_container_width = True):
+            st.switch_page("login.py")
+    else:
+        if st.button("Register Now", use_container_width = True, key = "landing_register"):
+            st.switch_page("login.py")
+        st.markdown(
+            "<p style = 'text-align: center; font-size: 13px; margin-top: 8px;'>"
+            "Already have an account?</p>",
+            unsafe_allow_html = True
+        )
+        if st.button("Log In", use_container_width = True, key = "landing_login"):
+            st.switch_page("login.py")

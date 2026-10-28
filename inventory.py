@@ -1,14 +1,21 @@
 import streamlit as st
 import pymongo
-import database as db
+import user_database as udb
 
 st.markdown(
     "<h1 style='text-align: center;'>Your Decks</h1>",
     unsafe_allow_html=True,
 )
 
+user_id = st.session_state.get("user_id")
+
+if not user_id:
+    st.info("Log in to see your saved decks.")
+    st.page_link("login.py", label="Log In / Register", icon=":material/person:")
+    st.stop()
+
 try:
-    decks = db.get_decks(st.session_state.get("user_id"))
+    decks = udb.get_decks(user_id)
 except (pymongo.errors.PyMongoError, RuntimeError) as error:
     st.error(f"Could not load decks: {error}")
     st.stop()
@@ -44,5 +51,9 @@ for i, deck in enumerate(decks):
                 st.caption("This deck has no cards yet.")
 
             if st.button("Delete deck", key=f"delete_{deck['_id']}"):
-                db.delete_deck(deck["_id"])
-                st.rerun()
+                try:
+                    udb.delete_deck(deck["_id"], user_id)
+                except (pymongo.errors.PyMongoError, RuntimeError) as error:
+                    st.error(f"Could not delete deck: {error}")
+                else:
+                    st.rerun()

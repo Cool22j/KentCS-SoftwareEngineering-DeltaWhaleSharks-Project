@@ -4,3 +4,4 @@ python-dotenv
 ijson
 requests
 langchain-core
+bcrypt

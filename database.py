@@ -1,5 +1,3 @@
-
-
 import os
 import re
 import uuid
@@ -42,30 +40,3 @@ def search_cards(name="", limit=20, card_type=""):
     if card_type.strip():
         query["type_line"] = {"$regex": re.escape(card_type.strip()), "$options": "i"}
     return list(get_cards_collection().find(query).sort("name", 1).limit(limit))
-
-
-def save_deck(name, deck_format, colors, strategy, deck_cards, user_id=None):
-    """Save a new deck and return its id."""
-    deck_id = uuid.uuid4().hex
-    get_decks_collection().insert_one({
-        "_id": deck_id,
-        "user_id": user_id,
-        "name": name,
-        "format": deck_format,
-        "colors": colors,
-        "strategy": strategy,
-        "cards": list(deck_cards),
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-    })
-    return deck_id
-
-
-def get_decks(user_id=None):
-    """Return all saved decks, newest first."""
-    query = {"user_id": user_id} if user_id else {}
-    return list(get_decks_collection().find(query).sort("created_at", -1))
-
-
-def delete_deck(deck_id):
-    """Delete a deck. Returns True if it was deleted."""
-    return get_decks_collection().delete_one({"_id": deck_id}).deleted_count > 0
