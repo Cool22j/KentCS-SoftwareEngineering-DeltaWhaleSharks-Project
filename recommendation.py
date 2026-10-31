@@ -24,6 +24,8 @@ CARD_FIELDS = {
     "type_line": 1,
     "oracle_text": 1,
     "color_identity": 1,
+    "image_uris": 1,
+    "card_faces": 1,
     "legalities": 1,
 }
 
@@ -355,6 +357,8 @@ def _cleanup_and_add_lands(state):
             "name": card["name"],
             "qty": qty,
             "role": str(item.get("role", "land" if is_land else "spell")),
+            "image_uris": card.get("image_uris"),
+            "card_faces": card.get("card_faces"),
         })
         seen.add(card["name"])
         if not is_land:
@@ -369,7 +373,7 @@ def _cleanup_and_add_lands(state):
         if "Land" in card.get("type_line", "") or card["name"] in seen:
             continue
         qty = min(max_copies, target_spells - sum(c["qty"] for c in cleaned))
-        cleaned.append({"name": card["name"], "qty": qty, "role": "support"})
+        cleaned.append({"name": card["name"], "qty": qty, "role": "support", "image_uris": card.get("image_uris"), "card_faces": card.get("card_faces"),})
         seen.add(card["name"])
 
     # Allocate Basic Lands proportional to the colored mana symbols in the chosen cards

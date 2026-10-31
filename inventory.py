@@ -1,6 +1,7 @@
 import streamlit as st
 import pymongo
 import user_database as udb
+from pages import edit
 
 st.markdown(
     "<h1 style='text-align: center;'>Your Decks</h1>",
@@ -57,3 +58,6 @@ for i, deck in enumerate(decks):
                     st.error(f"Could not delete deck: {error}")
                 else:
                     st.rerun()
+            if st.button("Edit deck", key=f"edit_{deck['_id']}"):
+                st.session_state["deckToEdit"] = deck
+                st.switch_page(edit)
