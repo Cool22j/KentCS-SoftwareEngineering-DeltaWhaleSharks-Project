@@ -47,17 +47,30 @@ for i, deck in enumerate(decks):
             st.write(f"**Saved:** {deck['created_at']}")
 
             if deck["cards"]:
-                st.table(deck["cards"])
+                display = [
+                    {
+                        "Name": card["name"],
+                        "Quantity": card["qty"],
+                        "Role": card.get("role", "")
+                    }
+                    for card in deck["cards"]
+                ]
+
+                st.table(display)
+
             else:
                 st.caption("This deck has no cards yet.")
 
-            if st.button("Delete deck", key=f"delete_{deck['_id']}"):
-                try:
-                    udb.delete_deck(deck["_id"], user_id)
-                except (pymongo.errors.PyMongoError, RuntimeError) as error:
-                    st.error(f"Could not delete deck: {error}")
-                else:
-                    st.rerun()
-            if st.button("Edit deck", key=f"edit_{deck['_id']}"):
-                st.session_state["deckToEdit"] = deck
-                st.switch_page(edit)
+            buttonCol1, buttonCol2 = st.columns(2)
+            with buttonCol1:
+                if st.button("Delete deck", key=f"delete_{deck['_id']}"):
+                    try:
+                        udb.delete_deck(deck["_id"], user_id)
+                    except (pymongo.errors.PyMongoError, RuntimeError) as error:
+                        st.error(f"Could not delete deck: {error}")
+                    else:
+                        st.rerun()
+            with buttonCol2:
+                if st.button("Edit deck", key=f"edit_{deck['_id']}"):
+                    st.session_state["deckToEdit"] = deck
+                    st.switch_page(edit)

@@ -6,6 +6,42 @@ from pages import deckInventory
 
 
 deck = st.session_state.get("deckToEdit")
+
+colors= {
+    "W": "255, 255, 220",  
+    "U": "70, 130, 220",  
+    "B": "130, 90, 160", 
+    "R": "220, 75, 60",  
+    "G": "70, 160, 90",  
+}
+
+#set gradient background
+deckColor = deck.get("colors", "")
+if isinstance(deckColor, str):
+    deckColor = [c.strip() for c in deckColor.split(",")]
+
+gradientColors = [
+    colors[c]
+    for c in deckColor
+    if c in colors
+]
+
+if gradientColors:
+    gradients = ", ".join(
+        f"radial-gradient(ellipse at {i * 100 / max(len(gradientColors)-1, 1)}% 100%, rgba({color}, 0.35), transparent 65%)"
+        for i, color in enumerate(gradientColors)
+    )
+
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{background-image: {gradients} !important; background-attachment: fixed; background-repeat: no-repeat;}}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 st.markdown(
     f"<h1 style='text-align: center;'> {deck['name']} </h1>",
     unsafe_allow_html=True,
@@ -24,7 +60,7 @@ outCol1, outCol2 = st.columns([1, 1])
 for i, card in enumerate(deck["cards"]):
     if i%2 == 0:
         with outCol1:
-            with st.container(border=True, height = 280, width = 300):
+            with st.container(border=True, width = 300):
 
                 col1, col2, col3 = st.columns([1, 3, 1])
 
@@ -48,8 +84,8 @@ for i, card in enumerate(deck["cards"]):
                     if image_url:
                         st.image(image_url, use_container_width=True)
                     else:
-                        st.caption("Image unavailable")
-                    st.caption(f"X: {card['qty']}")
+                        st.caption("Image unavailable (This may be a basic land)")
+                    st.caption(f"X {card['qty']}")
 
                 with col3:
                     if st.button("+", key=f"add_{i}"):
@@ -57,7 +93,7 @@ for i, card in enumerate(deck["cards"]):
                         st.rerun()
     else:
         with outCol2:
-            with st.container(border=True, height = 280, width = 300):
+            with st.container(border=True, width = 300):
 
                 col1, col2, col3 = st.columns([1, 3, 1])
 
@@ -81,8 +117,8 @@ for i, card in enumerate(deck["cards"]):
                     if image_url:
                         st.image(image_url, use_container_width=True)
                     else:
-                        st.caption("Image unavailable")
-                    st.caption(f"X: {card['qty']}")
+                        st.caption("Image unavailable (This may be a basic land)")
+                    st.caption(f"X {card['qty']}")
 
                 with col3:
                     if st.button("+", key=f"add_{i}"):
