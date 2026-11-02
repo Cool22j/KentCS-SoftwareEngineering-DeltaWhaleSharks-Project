@@ -4,7 +4,9 @@ import pymongo
 from search import search
 
 # Creates the main title "Card Shark"
-st.image("logo.png")
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    st.image("logo.png", use_container_width=True)
 
 # This displays the text underneath Card Shark
 st.markdown(

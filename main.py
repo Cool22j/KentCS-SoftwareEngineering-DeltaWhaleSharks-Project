@@ -1,11 +1,18 @@
 import streamlit as st
+
+st.set_page_config(
+    page_title="Card Shark",
+    page_icon=":material/style:",
+    layout="wide",
+)
+
 from pages import *
 
-st.logo("logo.png", size = "large")
+st.logo("logo.png", size="large")
 
-#create navigation bar
+# create navigation bar
 nv = st.navigation(
     [landing, rules, beginner, deckBuilder, deckInventory, account, edit],
-    position = "top"
+    position="top",
 )
 nv.run()
