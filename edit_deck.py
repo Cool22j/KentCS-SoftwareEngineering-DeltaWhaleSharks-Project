@@ -1,8 +1,8 @@
 import streamlit as st
 import pymongo
-import database as db
 import user_database as udb
 from pages import deckInventory
+from search import search
 
 
 deck = st.session_state.get("deckToEdit")
@@ -41,11 +41,13 @@ if gradientColors:
         unsafe_allow_html=True,
     )
 
-
 st.markdown(
     f"<h1 style='text-align: center;'> {deck['name']} </h1>",
     unsafe_allow_html=True,
 )
+
+search(True, deck)
+
 st.write("Format:", deck["format"])
 st.write("Colors:", deck["colors"])
 
