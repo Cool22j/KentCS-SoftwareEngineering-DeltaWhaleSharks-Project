@@ -28,7 +28,7 @@ col1, col2 = st.columns(2)
 
 st.markdown("""
 <style>
-div[data-testid="stExpander"] {
+div[data-testid="stExpander"]:not(:has(div[data-testid="stExpander"])) {
     border-radius: 16px;
     width: 300px;
     margin-bottom: 8px;
@@ -42,21 +42,36 @@ for i, deck in enumerate(decks):
         card_count = sum(card["qty"] for card in deck["cards"])
 
         with st.expander(f"{deck['name']}  ·  {deck['format']}  ·  {card_count} cards"):
+            with st.container(border = True):
+                st.caption("Preview")
+                image_url = (deck["cards"][0].get("image_uris") or {}).get("normal")
+                if not image_url:
+                    faces = deck["cards"][0].get("card_faces") or []
+                    if faces:
+                        image_url = (
+                            (faces[0].get("image_uris") or {}).get("normal")
+                        )          
+                if image_url:
+                    st.image(image_url, width = 150)
+                else:
+                    st.caption("Image unavailable (This may be a basic land)")
+                    st.image(image_url, width = 150)
             st.write(f"**Colors:** {deck['colors']}")
             st.write(f"**Strategy:** {deck['strategy']}")
             st.write(f"**Saved:** {deck['created_at']}")
 
             if deck["cards"]:
-                display = [
-                    {
-                        "Name": card["name"],
-                        "Quantity": card["qty"],
-                        "Role": card.get("role", "")
-                    }
-                    for card in deck["cards"]
-                ]
+                with st.expander(label = "See All Cards", expanded = False, width= "stretch"):
+                    display = [
+                        {
+                            "Name": card["name"],
+                            "Quantity": card["qty"],
+                            "Role": card.get("role", "")
+                        }
+                        for card in deck["cards"]
+                    ]
 
-                st.table(display)
+                    st.table(display)
 
             else:
                 st.caption("This deck has no cards yet.")

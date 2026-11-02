@@ -88,6 +88,8 @@ for i, card in enumerate(deck["cards"]):
                     else:
                         st.caption("Image unavailable (This may be a basic land)")
                     st.caption(f"X {card['qty']}")
+                    st.caption(f"Role: {card["role"]}")
+
 
                 with col3:
                     if st.button("+", key=f"add_{i}"):
@@ -121,6 +123,9 @@ for i, card in enumerate(deck["cards"]):
                     else:
                         st.caption("Image unavailable (This may be a basic land)")
                     st.caption(f"X {card['qty']}")
+                    
+                    st.caption(f"Role: {card["role"]}")
+
 
                 with col3:
                     if st.button("+", key=f"add_{i}"):
