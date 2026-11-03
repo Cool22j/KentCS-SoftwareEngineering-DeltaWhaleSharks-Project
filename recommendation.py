@@ -286,7 +286,7 @@ def _select_cards_with_llm(state):
 
     prompt = (
         f"Build a {deck_size}-card {state['format']} Magic: The Gathering deck from the candidate cards below "
-        "that fulfills the user's request.\n"
+        "that fulfills the user's request and the deckbuilding rules of the format. for commander, the commander must be a legendary creature or a planeswalker with rulestext that says they can be a commander. commanders colors must match the deck's color identity.\n"
         "Return JSON in this exact structure:\n"
         '{\n'
         '  "query": "<explanation of how the deck works and why these cards fit the user request>",\n'
