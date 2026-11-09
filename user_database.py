@@ -5,7 +5,7 @@ users collection and the owner-scoped deck operations on top of it.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 
 import database as db
@@ -91,3 +91,112 @@ def delete_deck(deck_id, user_id):
         return False
     result = get_user_decks_collection().delete_one({"_id": deck_id, "user_id": user_id})
     return result.deleted_count > 0
+
+
+# Cards a user owns (their collection)
+#
+# One document per user per printing, so owning 3 Lightning Bolts from two
+# different sets is two documents. The unique index stops duplicate rows when
+# two adds happen at the same time.
+
+@lru_cache(maxsize=1)
+def _create_owned_cards_indexes():
+    """Create the indexes on the owned_cards collection (once per process)."""
+    owned = db.get_database()["owned_cards"]
+    owned.create_index([("user_id", 1), ("card_id", 1)], unique=True)
+    owned.create_index([("user_id", 1), ("name", 1)])
+    return True
+
+
+def get_owned_cards_collection():
+    """Return the owned_cards collection with its indexes in place."""
+    _create_owned_cards_indexes()
+    return db.get_database()["owned_cards"]
+
+
+def _card_image_url(card):
+    """Pick an image for a card, falling back to the front face of double-faced cards."""
+    image_uris = card.get("image_uris") or {}
+    if image_uris.get("normal"):
+        return image_uris["normal"]
+    faces = card.get("card_faces") or []
+    if faces and isinstance(faces[0], dict):
+        return (faces[0].get("image_uris") or {}).get("normal")
+    return None
+
+
+def _card_price(card):
+    """Return the Scryfall USD price as a float, or None if it has no price."""
+    try:
+        return float((card.get("prices") or {}).get("usd"))
+    except (TypeError, ValueError):
+        return None
+
+
+def add_to_collection(user_id, card, qty=1):
+    """Add copies of a card printing to the user's collection."""
+    if not user_id:
+        raise ValueError("You must be logged in to add cards to your collection.")
+    if not isinstance(qty, int) or not 1 <= qty <= 999:
+        raise ValueError("Quantity must be a whole number between 1 and 999.")
+    if not card or not card.get("id"):
+        raise ValueError("That card could not be found.")
+
+    now = datetime.now(timezone.utc)
+    get_owned_cards_collection().update_one(
+        {"user_id": user_id, "card_id": card["id"]},
+        {
+            "$inc": {"qty": qty},
+            "$set": {"updated_at": now},
+            "$setOnInsert": {
+                "name": card.get("name", ""),
+                "set": card.get("set", ""),
+                "set_name": card.get("set_name", ""),
+                "collector_number": card.get("collector_number", ""),
+                "type_line": card.get("type_line", ""),
+                "color_identity": card.get("color_identity", []),
+                "rarity": card.get("rarity", ""),
+                "image_url": _card_image_url(card),
+                "price_usd": _card_price(card),
+                "added_at": now,
+            },
+        },
+        upsert=True,
+    )
+
+
+def set_owned_qty(user_id, card_id, qty):
+    """Set how many copies the user owns. 0 or less removes the card. Returns True if found."""
+    if not user_id:
+        return False
+    owned = get_owned_cards_collection()
+    if qty <= 0:
+        return owned.delete_one({"user_id": user_id, "card_id": card_id}).deleted_count > 0
+    result = owned.update_one(
+        {"user_id": user_id, "card_id": card_id},
+        {"$set": {"qty": int(qty), "updated_at": datetime.now(timezone.utc)}},
+    )
+    return result.matched_count > 0
+
+
+def remove_from_collection(user_id, card_id):
+    """Remove a card printing from the user's collection. Returns True if it was there."""
+    return set_owned_qty(user_id, card_id, 0)
+
+
+def get_collection(user_id):
+    """Return every card the user owns, sorted by name. No user means no cards."""
+    if not user_id:
+        return []
+    return list(get_owned_cards_collection().find({"user_id": user_id}).sort([("name", 1), ("set", 1)]))
+
+
+def get_owned_counts(user_id):
+    """Return {card name: total copies owned across all printings} for the user."""
+    if not user_id:
+        return {}
+    pipeline = [
+        {"$match": {"user_id": user_id}},
+        {"$group": {"_id": "$name", "qty": {"$sum": "$qty"}}},
+    ]
+    return {row["_id"]: row["qty"] for row in get_owned_cards_collection().aggregate(pipeline)}

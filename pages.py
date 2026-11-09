@@ -32,6 +32,12 @@ beginner = st.Page(
     icon = ":material/school:"
 )
 
+cardCollection = st.Page(
+    "collection.py",
+    title = "My Collection",
+    icon = ":material/collections_bookmark:"
+)
+
 account = st.Page(
     "login.py",
     title = "Account",
