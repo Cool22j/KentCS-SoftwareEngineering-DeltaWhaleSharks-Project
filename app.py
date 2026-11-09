@@ -8,9 +8,9 @@ import base64
 from pathlib import Path
 import database as db
 
-def get_card_image_url(card_name):
+def get_card_image_url(card):
     #extract image URL from Scryfall API
-    image_urls = card.get("image_uris")
+    image_urls = card.get("image_uris") or card.get("image_urls")
 
     if isinstance(image_urls, dict):
         url = (
@@ -40,7 +40,7 @@ def get_card_image_url(card_name):
 def attach_card_image(card):
     # find and attach image info to card
 
-    if card.get("image_urls") or card.get("card_faces"):
+    if card.get("image_uris") or card.get("image_urls") or card.get("card_faces"):
         return card
 
     results = db.search_cards(card["name"], limit=20)
@@ -48,7 +48,8 @@ def attach_card_image(card):
     for result in results:
         if result.get("name", "").lower() == card["name"].lower():
             card["id"] = result.get("id")
-            card["image_urls"] = result.get("image_urls")
+            card["image_uris"] = result.get("image_uris")
+            card["image_urls"] = result.get("image_uris")
             card["card_faces"] = result.get("card_faces")
             break
     return card
@@ -197,6 +198,7 @@ if st.session_state["deck"] is not None:
 
     for i, card in enumerate(cards):
         attach_card_image(card)
+        image_url = get_card_image_url(card)
         col1, col2, col3, col4, col5, col6 = st.columns([1.2, 4, 0.8, 0.8, 0.8, 1.5])
 
         #card image

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from langchain_core.runnables import RunnableLambda
 
 from database import get_cards_collection
-from groq_client import ask_groq_json, get_model
+from rocky import ask_rocky_json, get_model
 
 load_dotenv()
 
@@ -111,6 +111,8 @@ def build_base_filter(deck_format, colors):
     }
     if colors is not None:
         base["color_identity"] = {"$not": {"$elemMatch": {"$nin": colors}}}
+        if colors and deck_format != "commander":
+            base["colors"] = {"$in": colors}
     return base
 
 
@@ -147,77 +149,76 @@ def run_mongo_query(mongo_filter, base_filter, limit=35):
 # LangChain Pipeline Steps
 # ---------------------------------------------------------------------------
 
+def _infer_colors_from_prompt(text):
+    """Infer MTG colors from color names, guild/shard aliases, or color-pie mechanics in the prompt."""
+    lower = text.lower()
+    explicit = []
+    for word in re.findall(r"[a-z0-9-]+", lower):
+        if word in {
+            "white", "blue", "black", "red", "green", "colorless",
+            "azorius", "dimir", "rakdos", "gruul", "selesnya",
+            "orzhov", "izzet", "golgari", "boros", "simic",
+            "esper", "grixis", "jund", "naya", "bant",
+            "abzan", "jeskai", "sultai", "mardu", "temur", "wubrg", "5c",
+        }:
+            explicit.append(word)
+    if explicit:
+        return normalize_colors(" ".join(explicit))
+
+    color_keywords = {
+        "W": ("lifegain", "gain life", "angel", "soldier", "cat", "vigilance", "indestructible", "exile target", "tax", "stax"),
+        "U": ("counterspell", "counter target", "draw", "blink", "flicker", "return", "flying", "wizard", "merfolk", "mill", "bounce", "control", "hate", "annoy", "frustrate", "lock", "unfun"),
+        "B": ("sacrifice", "dies", "graveyard", "destroy", "discard", "zombie", "vampire", "demon", "deathtouch", "reanimate", "lose life", "hate", "annoy", "punish", "miserable", "cruel", "suffering", "toxic"),
+        "R": ("burn", "damage", "steal", "gain control", "threaten", "haste", "goblin", "dragon", "prowess", "treasure", "aggro"),
+        "G": ("ramp", "mana", "land", "forest", "elf", "elves", "trample", "dinosaur", "hydra", "beast", "+1/+1 counter", "fight"),
+    }
+    scores = {c: sum(1 for kw in kws if kw in lower) for c, kws in color_keywords.items()}
+    matched = [c for c, score in sorted(scores.items(), key=lambda x: -x[1]) if score > 0][:2]
+    return sorted(matched) if matched else ["U", "B"]
+
+
 def _plan_searches(state):
-    """Step 1: Have the LLM break the user's request into colors and sub-goals."""
+    """Step 1: Break the user's request into colors and 2 distinct search sub-goals."""
     if state.get("progress"):
         state["progress"]("Breaking strategy into search steps…")
 
-    prompt = (
-        "You are a Magic: The Gathering deck-building assistant. Analyze the user's request.\n"
-        "Return JSON in this exact structure (replace placeholders with actual values):\n"
-        '{\n'
-        '  "query": "<summary of the overall deck strategy>",\n'
-        '  "output": {\n'
-        '    "colors": ["<color symbol W, U, B, R, or G>"],\n'
-        '    "searches": [\n'
-        '      "<distinct search goal 1>",\n'
-        '      "<distinct search goal 2>"\n'
-        '    ]\n'
-        '  }\n'
-        '}\n'
-        "Guidelines:\n"
-        "- Break the user's request into 2 to 4 distinct search goals in 'searches' so each theme, "
-        "mechanic, or card role they asked for is searched separately.\n"
-        "- If 'supplied_colors' is non-empty, keep those exact colors.\n"
-        "- If 'supplied_colors' is empty, infer whichever color(s) from W, U, B, R, G (or [] for colorless) "
-        "best match the user's prompt and Magic's color pie (e.g. W=lifegain/tokens/order, "
-        "U=counterspells/draw/flying, B=sacrifice/discard/destroy/graveyard, "
-        "R=steal creatures ('gain control')/haste/direct damage/sacrifice, G=ramp/big creatures/elves).\n"
-        f"Request: {json.dumps({'strategy': state['question'], 'format': state['format'], 'supplied_colors': state['colors']})}"
-    )
+    colors = state["colors"] if state["colors"] is not None else _infer_colors_from_prompt(state["question"])
+    lower_q = state["question"].lower()
 
-    response = ask_groq_json(prompt, state["model"], state["headers"])
-    output = response["output"]
-
-    if state["colors"] is not None:
-        colors = state["colors"]
+    parts = [
+        p.strip()
+        for p in re.split(r"\b(?:and then|and also|while also|and|with|plus|then)\b|[,;]", state["question"], flags=re.IGNORECASE)
+        if len(p.strip()) >= 6
+    ]
+    if len(parts) >= 2:
+        searches = [parts[0], " and ".join(parts[1:3])]
+    elif any(w in lower_q for w in ("hate", "annoy", "miserable", "frustrate", "punish", "unfun", "rage")):
+        searches = [
+            "counter target spell or return target permanent to hand",
+            "target opponent discards a card or sacrifices a creature or loses life",
+        ]
     else:
-        raw_colors = output.get("colors", [])
-        colors = normalize_colors(raw_colors) if raw_colors else []
-
-    searches = output.get("searches", [state["question"]])
-    if not isinstance(searches, list) or not searches:
-        searches = [state["question"]]
+        searches = [
+            f"core engine cards for: {state['question']}",
+            f"synergy and payoff cards for: {state['question']}",
+        ]
 
     return {
         **state,
         "colors": colors,
-        "strategy_summary": response["query"],
-        "searches": [str(s) for s in searches[:5]],
+        "strategy_summary": state["question"],
+        "searches": searches[:2],
     }
 
 
 def _generate_and_run_single_search(goal, deck_format, colors, base_filter, model, headers):
     """Reusable sub-chain: LLM outputs {"query": ..., "output": <Mongo filter>} -> run in MongoDB."""
     prompt = (
-        "Generate a MongoDB filter to find Magic: The Gathering cards for this search goal.\n"
-        "Return JSON in this exact structure:\n"
-        '{\n'
-        '  "query": "<description of what this query searches for>",\n'
-        '  "output": <MongoDB filter object>\n'
-        '}\n'
-        "Rules for 'output':\n"
-        "- Must be a MongoDB query dict using fields from: oracle_text, type_line, cmc, name.\n"
-        "- Use SHORT 1-3 word Magic rules phrases separated by |, never long full sentences "
-        "(e.g., for enter-the-battlefield triggers use 'enters', for blink/flicker use 'exile target.*return', "
-        "for steal creature use 'gain control of target', for sacrifice use 'sacrifice a|whenever a creature dies').\n"
-        "- Prefer searching ONLY 'oracle_text' with 2-4 broad alternatives separated by | "
-        '(for example: {"oracle_text": {"$regex": "enters|exile target.*return", "$options": "i"}}). '
-        "Do not restrict 'type_line' unless the goal specifically asks for a creature tribe or artifact.\n"
-        "- Do NOT include lang, legalities, or color_identity (Python adds those automatically).\n"
-        f"Search goal: {goal}\nFormat: {deck_format}\nColors: {colors}"
+        f"Search goal: {goal}\n"
+        "Return ONLY JSON with a 1-sentence 'query' and a MongoDB regex 'output' on oracle_text using 2-3 short MTG rules phrases separated by |:\n"
+        '{"query": "Searching for cards that ...", "output": {"oracle_text": {"$regex": "phrase1|phrase2", "$options": "i"}}}'
     )
-    parsed = ask_groq_json(prompt, model, headers)
+    parsed = ask_rocky_json(prompt, model, headers, max_completion_tokens=6144)
     mongo_query = parsed["output"]
     try:
         cards = run_mongo_query(mongo_query, base_filter, limit=30)
@@ -256,7 +257,7 @@ def _execute_searches(state):
             search_logs.append(result["log"])
             if result["cards"]:
                 search_batches.append(result["cards"])
-        except ValueError:
+        except (ValueError, RuntimeError):
             continue
 
     # Interleave results across all searches so every requested theme gets equal representation
@@ -296,54 +297,64 @@ def _execute_searches(state):
     }
 
 
+def _infer_card_role(card):
+    """Derive a concise deck role label from a card's oracle text and type line."""
+    text = (card.get("oracle_text") or "").lower()
+    front_type = card.get("type_line", "Spell").split("//")[0].split("—")[0].strip() or "Spell"
+    if "gain" in text and "life" in text:
+        return "Lifegain synergy"
+    if "lose" in text and "life" in text:
+        return "Life drain"
+    if "deals" in text and "damage" in text:
+        return "Direct damage"
+    if "counter target" in text:
+        return "Counterspell"
+    if "destroy target" in text or "exile target" in text:
+        return "Removal"
+    if "search your library for a" in text and "land" in text or "add {" in text:
+        return "Mana acceleration"
+    if "draw a card" in text or "draw two" in text or "draw cards" in text:
+        return "Card advantage"
+    if "sacrifice a" in text:
+        return "Sacrifice synergy"
+    if "enters" in text:
+        return "Enter trigger"
+    return f"{front_type} synergy"
+
+
 def _select_cards_with_llm(state):
     """Step 3: Pass combined search results to the LLM to choose deck cards, quantities, and land count."""
     if state.get("progress"):
         state["progress"]("Selecting cards and assembling the deck…")
 
     is_commander = state["format"] == "commander"
-    deck_size = 100 if is_commander else 60
     max_copies = 1 if is_commander else 4
+    default_lands = 37 if is_commander else 23
 
-    pool_limit = 70 if is_commander else 45
-    compact_pool = [
-        {
-            "name": c["name"],
-            "cost": c.get("mana_cost", ""),
-            "type": c.get("type_line", ""),
-            "rank": _popularity_rank(c) if _popularity_rank(c) < 999999 else None,
-            "text": (c.get("oracle_text") or "")[:90],
-        }
+    pool_limit = 22 if is_commander else 16
+    candidate_lines = [
+        f"- {c['name']} ({c.get('mana_cost', '')}, {c.get('type_line', '').split('—')[0].strip()}): {(c.get('oracle_text') or '').replace(chr(10), ' ')[:55]}"
         for c in state["candidates"][:pool_limit]
     ]
 
-    prompt = (
-        f"Build a {deck_size}-card {state['format']} Magic: The Gathering deck from the candidate cards below "
-        "that fulfills the user's request and the deckbuilding rules of the format. for commander, the commander must be a legendary creature or a planeswalker with rulestext that says they can be a commander. commanders colors must match the deck's color identity.\n"
-        "Return JSON in this exact structure:\n"
-        '{\n'
-        '  "query": "<explanation of how the deck works and why these cards fit the user request>",\n'
-        '  "output": {\n'
-        '    "land_count": <number of lands appropriate for this strategy, e.g. 20-26 for 60-card or 36-38 for commander>,\n'
-        '    "cards": [\n'
-        f'      {{"name": "<Exact Card Name from candidates>", "qty": <1 to {max_copies}>, "role": "<role in deck>"}}\n'
-        '    ]\n'
-        '  }\n'
-        '}\n'
-        "Guidelines:\n"
-        "- Always build the best possible deck from the provided Candidate cards list (never refuse or say you cannot build the deck).\n"
-        "- ONLY use exact card names that appear in the Candidate cards list below. Never invent card names outside the list.\n"
-        f"- Select enough cards so that 'land_count' + the sum of 'qty' across all chosen cards equals {deck_size} "
-        f"(for example, if 'land_count' is 22, the sum of 'qty' across your chosen cards should be {deck_size - 22}).\n"
-        f"- Choose quantities (1 to {max_copies} copies) that fit a realistic mana curve: run {max_copies} copies of cheap 1-3 mana core cards, and at most 1-2 copies of expensive 6+ mana finishers unless the strategy is heavy mana ramp.\n"
-        "- Each candidate includes a popularity 'rank' (from edhrec_rank / penny_rank, where a lower number means a more popular, proven meta staple). Favor strong, popular staples that fit the strategy over obscure high-rank filler.\n"
-        "- Balance the themes requested by the user.\n"
-        "- Python will automatically supply Basic Lands to reach the full deck size.\n"
-        f"User request: {state['question']}\n"
-        f"Candidate cards: {json.dumps(compact_pool)}"
+    commander_rule = (
+        "Pick 1 legendary creature commander first, then pick the best fitting cards (qty 1)."
+        if is_commander
+        else f"Pick the 10 best fitting cards from Candidates using qty 3 or {max_copies} for each card."
     )
 
-    response = ask_groq_json(prompt, state["model"], state["headers"], max_completion_tokens=4096)
+    prompt = (
+        f"Request ({state['format']}): {state['question']}\n"
+        "Candidates (ordered by popularity):\n"
+        + "\n".join(candidate_lines)
+        + "\n\n"
+        f"{commander_rule} "
+        "Do not count total deck size; Python fills remaining slots and lands automatically.\n"
+        "Return ONLY JSON:\n"
+        f'{{"query": "1-2 sentence explanation of how the deck works", "output": {{"land_count": {default_lands}, "cards": [{{"name": "Exact Name from Candidates", "qty": {max_copies}, "role": "2-4 word role"}}]}}}}\n'
+    )
+
+    response = ask_rocky_json(prompt, state["model"], state["headers"], max_completion_tokens=6144)
     output = response["output"] if isinstance(response["output"], dict) else {}
     return {
         **state,
@@ -424,11 +435,10 @@ def _cleanup_and_add_lands(state):
             continue
         qty = min(max_copies, target_spells - current_spells)
         rank = _popularity_rank(card)
-        front_type = card.get("type_line", "Spell").split("//")[0].split("—")[0].strip() or "Spell"
         cleaned.append({
             "name": card["name"],
             "qty": qty,
-            "role": f"{front_type} (auto-fill)",
+            "role": _infer_card_role(card),
             "popularity_rank": rank if rank < 999999 else None,
             "image_uris": card.get("image_uris"),
             "card_faces": card.get("card_faces"),
@@ -483,10 +493,12 @@ def get_recommendations(question, format="modern", colors=None, progress=None):
     if not isinstance(format, str) or format.lower() not in FORMATS:
         raise ValueError(f"Unsupported format: {format}")
 
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv("ROCKY_API_KEY")
     if not api_key:
-        raise RuntimeError("GROQ_API_KEY is not set in your .env file.")
+        raise RuntimeError("ROCKY_API_KEY is not set in your .env file.")
 
+    headers = {"Authorization": f"Bearer {api_key}"}
+    model = get_model(headers)
     explicit_colors = normalize_colors(colors) if (colors is not None and str(colors).strip() != "") else None
 
     chain = (
@@ -500,7 +512,7 @@ def get_recommendations(question, format="modern", colors=None, progress=None):
         "question": question.strip(),
         "format": format.lower(),
         "colors": explicit_colors,
-        "model": get_model(),
-        "headers": {"Authorization": f"Bearer {api_key}"},
+        "model": model,
+        "headers": headers,
         "progress": progress,
     })
