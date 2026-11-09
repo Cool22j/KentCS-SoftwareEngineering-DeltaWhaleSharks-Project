@@ -6,7 +6,52 @@ from recommendation import get_recommendations
 import streamlit.components.v1 as components
 import base64
 from pathlib import Path
+import database as db
 
+def get_card_image_url(card_name):
+    #extract image URL from Scryfall API
+    image_urls = card.get("image_uris")
+
+    if isinstance(image_urls, dict):
+        url = (
+            image_urls.get("normal")
+            or image_urls.get("small")
+            or image_urls.get("large")
+        )
+        if url:
+            return url
+
+    faces = card.get("card_faces")
+
+    if isinstance(faces, list) and len(faces) > 0:
+        if isinstance(faces[0], dict):
+            face_urls = faces[0].get("image_uris")
+
+            if isinstance(face_urls, dict):
+                url = (
+                    face_urls.get("normal")
+                    or face_urls.get("small")
+                    or face_urls.get("large")
+                )
+                if url:
+                    return url
+    return None
+
+def attach_card_image(card):
+    # find and attach image info to card
+
+    if card.get("image_urls") or card.get("card_faces"):
+        return card
+
+    results = db.search_cards(card["name"], limit=20)
+
+    for result in results:
+        if result.get("name", "").lower() == card["name"].lower():
+            card["id"] = result.get("id")
+            card["image_urls"] = result.get("image_urls")
+            card["card_faces"] = result.get("card_faces")
+            break
+    return card
 
 # Function to display the looping loading animation
 def loading():
@@ -151,9 +196,17 @@ if st.session_state["deck"] is not None:
         st.info("No cards added yet")
 
     for i, card in enumerate(cards):
-        col1, col2, col3, col4, col5 = st.columns([4, 1, 1, 1, 2])
+        attach_card_image(card)
+        col1, col2, col3, col4, col5, col6 = st.columns([1.2, 4, 0.8, 0.8, 0.8, 1.5])
 
+        #card image
         with col1:
+            if image_url:
+                st.image(image_url, width=100)
+            else:
+                st.write("No image available")
+        #card name
+        with col2:
             st.write(card["name"])
             caption_parts = []
             if card.get("role"):
@@ -163,20 +216,24 @@ if st.session_state["deck"] is not None:
             if caption_parts:
                 st.caption(" · ".join(caption_parts))
 
-        with col2:
+        #decrease quantity button
+        with col3:
             if st.button("-", key=f"minus_{i}", disabled=card["qty"] <= 1):
                 card["qty"] -= 1
                 st.rerun()
 
-        with col3:
+        #current quantity
+        with col4:
             st.write(card["qty"])
 
-        with col4:
+        #increase quantity button
+        with col5:
             if st.button("+", key=f"plus_{i}"):
                 card["qty"] += 1
                 st.rerun()
 
-        with col5:
+        #remove card button
+        with col6:
             if st.button("Remove", key=f"remove_{i}"):
                 cards.pop(i)
                 st.rerun()
