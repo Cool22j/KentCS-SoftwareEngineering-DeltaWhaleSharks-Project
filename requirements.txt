@@ -4,5 +4,4 @@ python-dotenv
 ijson
 requests
 langchain-core
-langchain-groq
 bcrypt
