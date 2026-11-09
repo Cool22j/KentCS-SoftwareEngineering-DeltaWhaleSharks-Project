@@ -27,11 +27,14 @@ CARD_FIELDS = {
     "image_uris": 1,
     "card_faces": 1,
     "legalities": 1,
+    "edhrec_rank": 1,
+    "penny_rank": 1,
 }
 
 ALLOWED_FIELDS = {
     "name", "oracle_text", "type_line", "cmc", "color_identity", "colors",
     "mana_cost", "keywords", "power", "toughness", "loyalty", "rarity",
+    "edhrec_rank", "penny_rank",
     "card_faces.oracle_text", "card_faces.type_line",
 }
 ALLOWED_OPERATORS = {
@@ -111,23 +114,33 @@ def build_base_filter(deck_format, colors):
     return base
 
 
+def _popularity_rank(card):
+    """Return a combined popularity rank using edhrec_rank and penny_rank (lower = more popular)."""
+    ranks = [
+        r for r in (card.get("edhrec_rank"), card.get("penny_rank"))
+        if isinstance(r, (int, float)) and not isinstance(r, bool) and r > 0
+    ]
+    return min(ranks) if ranks else 999999
+
+
 def run_mongo_query(mongo_filter, base_filter, limit=35):
-    """Run a validated MongoDB filter and deduplicate printings by card name."""
+    """Run a validated MongoDB filter, deduplicate by name, and prioritize popular meta cards."""
     safe_filter = validate_filter(mongo_filter)
     combined = {"$and": [base_filter, safe_filter]} if safe_filter else base_filter
     cursor = (
         get_cards_collection()
         .find(combined, CARD_FIELDS)
-        .limit(limit * 2)
+        .limit(limit * 5)
     )
     unique = {}
     for card in cursor:
         name = card.get("name")
-        if name and "Basic" not in card.get("type_line", "") and name not in unique:
+        if not name or "Basic" in card.get("type_line", ""):
+            continue
+        if name not in unique or _popularity_rank(card) < _popularity_rank(unique[name]):
             unique[name] = card
-            if len(unique) >= limit:
-                break
-    return list(unique.values())
+    ranked_cards = sorted(unique.values(), key=_popularity_rank)
+    return ranked_cards[:limit]
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +171,8 @@ def _plan_searches(state):
         "- If 'supplied_colors' is non-empty, keep those exact colors.\n"
         "- If 'supplied_colors' is empty, infer whichever color(s) from W, U, B, R, G (or [] for colorless) "
         "best match the user's prompt and Magic's color pie (e.g. W=lifegain/tokens/order, "
-        "U=counterspells/draw/flying, B=discard/destroy/graveyard, R=haste/direct damage/aggro, G=ramp/big creatures/elves).\n"
+        "U=counterspells/draw/flying, B=sacrifice/discard/destroy/graveyard, "
+        "R=steal creatures ('gain control')/haste/direct damage/sacrifice, G=ramp/big creatures/elves).\n"
         f"Request: {json.dumps({'strategy': state['question'], 'format': state['format'], 'supplied_colors': state['colors']})}"
     )
 
@@ -194,8 +208,12 @@ def _generate_and_run_single_search(goal, deck_format, colors, base_filter, mode
         '}\n'
         "Rules for 'output':\n"
         "- Must be a MongoDB query dict using fields from: oracle_text, type_line, cmc, name.\n"
-        "- Use broad, case-insensitive $regex alternatives separated by | so plenty of matching cards are found "
-        '(for example: {"oracle_text": {"$regex": "keyword1|keyword2", "$options": "i"}}).\n'
+        "- Use SHORT 1-3 word Magic rules phrases separated by |, never long full sentences "
+        "(e.g., for enter-the-battlefield triggers use 'enters', for blink/flicker use 'exile target.*return', "
+        "for steal creature use 'gain control of target', for sacrifice use 'sacrifice a|whenever a creature dies').\n"
+        "- Prefer searching ONLY 'oracle_text' with 2-4 broad alternatives separated by | "
+        '(for example: {"oracle_text": {"$regex": "enters|exile target.*return", "$options": "i"}}). '
+        "Do not restrict 'type_line' unless the goal specifically asks for a creature tribe or artifact.\n"
         "- Do NOT include lang, legalities, or color_identity (Python adds those automatically).\n"
         f"Search goal: {goal}\nFormat: {deck_format}\nColors: {colors}"
     )
@@ -203,6 +221,16 @@ def _generate_and_run_single_search(goal, deck_format, colors, base_filter, mode
     mongo_query = parsed["output"]
     try:
         cards = run_mongo_query(mongo_query, base_filter, limit=30)
+        # If the LLM combined multiple fields and got too few matches, retry with just oracle_text
+        if len(cards) < 5 and isinstance(mongo_query, dict) and "oracle_text" in mongo_query and len(mongo_query) > 1:
+            cards = run_mongo_query({"oracle_text": mongo_query["oracle_text"]}, base_filter, limit=30)
+        # If a long multi-word regex phrase still matched fewer than 5 cards, broaden it to key MTG terms
+        if len(cards) < 5 and isinstance(mongo_query, dict):
+            raw_regex = (mongo_query.get("oracle_text") or {}).get("$regex", "") if isinstance(mongo_query.get("oracle_text"), dict) else ""
+            words = [w for w in re.findall(r"[a-zA-Z]{4,}", raw_regex.lower()) if w not in {"this", "that", "your", "with", "from", "into", "when", "whenever", "creature", "creatures", "target", "card", "cards", "battlefield"}]
+            if words:
+                broad_query = {"oracle_text": {"$regex": "|".join(dict.fromkeys(words[:5])), "$options": "i"}}
+                cards = run_mongo_query(broad_query, base_filter, limit=30)
     except ValueError:
         cards = []
     return {"log": parsed["query"], "query": mongo_query, "cards": cards}
@@ -238,18 +266,22 @@ def _execute_searches(state):
             if card and card["name"] not in combined_cards:
                 combined_cards[card["name"]] = card
 
-    # Fallback: if regex searches returned fewer cards than needed, pull additional legal cards in color
+    # Fallback: if regex searches returned fewer cards than needed, pull additional popular legal cards in color
     target_nonlands = 62 if state["format"] == "commander" else 9
     if len(combined_cards) < target_nonlands:
         fallback_cursor = (
             get_cards_collection()
             .find(base_filter, CARD_FIELDS)
-            .limit(200)
+            .limit(300)
         )
+        fallback_pool = []
         for card in fallback_cursor:
             name = card.get("name")
             if name and "Basic" not in card.get("type_line", "") and name not in combined_cards:
-                combined_cards[name] = card
+                fallback_pool.append(card)
+        for card in sorted(fallback_pool, key=_popularity_rank):
+            if card["name"] not in combined_cards:
+                combined_cards[card["name"]] = card
                 if len(combined_cards) >= max(target_nonlands, 40):
                     break
 
@@ -279,6 +311,7 @@ def _select_cards_with_llm(state):
             "name": c["name"],
             "cost": c.get("mana_cost", ""),
             "type": c.get("type_line", ""),
+            "rank": _popularity_rank(c) if _popularity_rank(c) < 999999 else None,
             "text": (c.get("oracle_text") or "")[:90],
         }
         for c in state["candidates"][:pool_limit]
@@ -298,7 +331,12 @@ def _select_cards_with_llm(state):
         '  }\n'
         '}\n'
         "Guidelines:\n"
-        f"- Choose varied quantities (1 to {max_copies} copies) that make sense for each card's mana cost and the user's wishes.\n"
+        "- Always build the best possible deck from the provided Candidate cards list (never refuse or say you cannot build the deck).\n"
+        "- ONLY use exact card names that appear in the Candidate cards list below. Never invent card names outside the list.\n"
+        f"- Select enough cards so that 'land_count' + the sum of 'qty' across all chosen cards equals {deck_size} "
+        f"(for example, if 'land_count' is 22, the sum of 'qty' across your chosen cards should be {deck_size - 22}).\n"
+        f"- Choose quantities (1 to {max_copies} copies) that fit a realistic mana curve: run {max_copies} copies of cheap 1-3 mana core cards, and at most 1-2 copies of expensive 6+ mana finishers unless the strategy is heavy mana ramp.\n"
+        "- Each candidate includes a popularity 'rank' (from edhrec_rank / penny_rank, where a lower number means a more popular, proven meta staple). Favor strong, popular staples that fit the strategy over obscure high-rank filler.\n"
         "- Balance the themes requested by the user.\n"
         "- Python will automatically supply Basic Lands to reach the full deck size.\n"
         f"User request: {state['question']}\n"
@@ -333,7 +371,16 @@ def _cleanup_and_add_lands(state):
         target_lands = default_lands
 
     target_spells = deck_size - target_lands
-    by_name = {c["name"].lower(): c for c in state["candidates"]}
+    by_name = {}
+    for c in state["candidates"]:
+        full_lower = c["name"].lower()
+        by_name[full_lower] = c
+        if "//" in full_lower:
+            for face in full_lower.split("//"):
+                face_key = face.strip()
+                if face_key and face_key not in by_name:
+                    by_name[face_key] = c
+
     cleaned = []
     seen = set()
     current_spells = 0
@@ -349,32 +396,45 @@ def _cleanup_and_add_lands(state):
             qty = int(item.get("qty", 1))
         except (ValueError, TypeError):
             qty = 1
-        qty = max(1, min(qty, max_copies, deck_size - current_spells))
-        if qty <= 0:
-            continue
         is_land = "Land" in card.get("type_line", "")
+        remaining_slots = (deck_size - sum(c["qty"] for c in cleaned)) if is_land else (target_spells - current_spells)
+        qty = max(1, min(qty, max_copies, remaining_slots))
+        if qty <= 0 or remaining_slots <= 0:
+            continue
+        rank = _popularity_rank(card)
         cleaned.append({
             "name": card["name"],
             "qty": qty,
             "role": str(item.get("role", "land" if is_land else "spell")),
+            "popularity_rank": rank if rank < 999999 else None,
             "image_uris": card.get("image_uris"),
             "card_faces": card.get("card_faces"),
         })
         seen.add(card["name"])
         if not is_land:
             current_spells += qty
-        if sum(c["qty"] for c in cleaned) >= target_spells:
+        if current_spells >= target_spells:
             break
 
     # Top up from remaining retrieved candidates only if the deck needs more nonland cards
     for card in state["candidates"]:
-        if sum(c["qty"] for c in cleaned) >= target_spells:
+        if current_spells >= target_spells:
             break
         if "Land" in card.get("type_line", "") or card["name"] in seen:
             continue
-        qty = min(max_copies, target_spells - sum(c["qty"] for c in cleaned))
-        cleaned.append({"name": card["name"], "qty": qty, "role": "support", "image_uris": card.get("image_uris"), "card_faces": card.get("card_faces"),})
+        qty = min(max_copies, target_spells - current_spells)
+        rank = _popularity_rank(card)
+        front_type = card.get("type_line", "Spell").split("//")[0].split("—")[0].strip() or "Spell"
+        cleaned.append({
+            "name": card["name"],
+            "qty": qty,
+            "role": f"{front_type} (auto-fill)",
+            "popularity_rank": rank if rank < 999999 else None,
+            "image_uris": card.get("image_uris"),
+            "card_faces": card.get("card_faces"),
+        })
         seen.add(card["name"])
+        current_spells += qty
 
     # Allocate Basic Lands proportional to the colored mana symbols in the chosen cards
     colors = state["colors"]

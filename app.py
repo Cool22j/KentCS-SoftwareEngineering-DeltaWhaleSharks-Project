@@ -155,8 +155,13 @@ if st.session_state["deck"] is not None:
 
         with col1:
             st.write(card["name"])
+            caption_parts = []
             if card.get("role"):
-                st.caption(card["role"].capitalize())
+                caption_parts.append(card["role"].capitalize())
+            if card.get("popularity_rank"):
+                caption_parts.append(f"Popularity Rank #{card['popularity_rank']:,}")
+            if caption_parts:
+                st.caption(" · ".join(caption_parts))
 
         with col2:
             if st.button("-", key=f"minus_{i}", disabled=card["qty"] <= 1):
