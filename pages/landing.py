@@ -120,13 +120,13 @@ with col1:
         st.markdown("### Build a Deck")
         st.caption("Create a new Magic Deck.")
         if st.button("Open Deck Builder", key = "shortcut_builder", use_container_width = True):
-            st.switch_page("app.py")
+            st.switch_page("pages/app.py")
 
     with st.container(border=True):
         st.markdown("### Game Rules")
         st.caption("Look up MTG rules.")
         if st.button("Read Rules", key = "shortcut_rules", use_container_width = True):
-            st.switch_page("rules.py")
+            st.switch_page("pages/rules.py")
 
 # Makes the right column
 with col2:
@@ -134,13 +134,13 @@ with col2:
         st.markdown("### My Decks")
         st.caption("View and manage saved decks.")
         if st.button("View My Decks", key = "shortcut_inventory", use_container_width = True):
-            st.switch_page("inventory.py")
+            st.switch_page("pages/inventory.py")
 
     with st.container(border = True):
         st.markdown("### Beginner's Guide")
         st.caption("Learn the basics of MTG and deck building.")
         if st.button("Get Started", key = "shortcut_beginner", use_container_width = True):
-            st.switch_page("beginner.py")
+            st.switch_page("pages/beginner.py")
 
 # This section displays the heading and description at the bottom of the landing page.
 st.divider()
@@ -165,14 +165,14 @@ with col2:
     if st.session_state.get("user_id"):
         st.success(f"Signed in as {st.session_state.get('username', 'user')}")
         if st.button("Manage Account", use_container_width = True):
-            st.switch_page("login.py")
+            st.switch_page("pages/login.py")
     else:
         if st.button("Register Now", use_container_width = True, key = "landing_register"):
-            st.switch_page("login.py")
+            st.switch_page("pages/login.py")
         st.markdown(
             "<p style = 'text-align: center; font-size: 13px; margin-top: 8px;'>"
             "Already have an account?</p>",
             unsafe_allow_html = True
         )
         if st.button("Log In", use_container_width = True, key = "landing_login"):
-            st.switch_page("login.py")
+            st.switch_page("pages/login.py")

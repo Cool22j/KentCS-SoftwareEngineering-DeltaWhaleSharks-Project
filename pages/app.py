@@ -56,7 +56,9 @@ def attach_card_image(card):
 
 # Function to display the looping loading animation
 def loading():
-    video_path = Path(__file__).parent / "0000-0018.mp4"
+    video_path = Path(__file__).resolve().parent.parent / "0000-0018.mp4"
+    if not video_path.exists():
+        video_path = Path("0000-0018.mp4")
     video_data = base64.b64encode(video_path.read_bytes()).decode("utf-8")
 
     components.html(
@@ -245,7 +247,7 @@ if st.session_state["deck"] is not None:
 
     if not user_id:
         st.info("Log in to save this deck to your account.")
-        st.page_link("login.py", label="Log In / Register", icon=":material/person:")
+        st.page_link("pages/login.py", label="Log In / Register", icon=":material/person:")
 
     if st.button("Save Deck", disabled=not user_id):
         if len(cards) == 0:

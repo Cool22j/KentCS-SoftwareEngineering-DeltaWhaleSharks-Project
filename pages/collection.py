@@ -18,7 +18,7 @@ user_id = st.session_state.get("user_id")
 
 if not user_id:
     st.info("Log in to keep track of the cards you own.")
-    st.page_link("login.py", label="Log In / Register", icon=":material/person:")
+    st.page_link("pages/login.py", label="Log In / Register", icon=":material/person:")
     st.stop()
 
 

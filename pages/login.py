@@ -23,7 +23,7 @@ if st.session_state.get("user_id"):
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Go to My Decks", use_container_width=True):
-            st.switch_page("inventory.py")
+            st.switch_page("pages/inventory.py")
     with col2:
         if st.button("Log out", use_container_width=True):
             for key in ("user_id", "username", "deck"):
@@ -51,7 +51,7 @@ with tab_login:
                 st.error("Incorrect email or password.")
             else:
                 _sign_in(user)
-                st.switch_page("landing.py")
+                st.switch_page("pages/landing.py")
 
 # REGISTER
 
@@ -80,4 +80,4 @@ with tab_register:
                 st.error(f"Could not create the account: {error}")
             else:
                 _sign_in(user)
-                st.switch_page("landing.py")
+                st.switch_page("pages/landing.py")
