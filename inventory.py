@@ -24,7 +24,7 @@ except (pymongo.errors.PyMongoError, RuntimeError) as error:
 if not decks:
     st.info("No saved decks yet. Build one on the Deck Builder page!")
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns([1, 1, 1])
 
 st.markdown("""
 <style>
@@ -37,27 +37,78 @@ div[data-testid="stExpander"]:not(:has(div[data-testid="stExpander"])) {
 """, unsafe_allow_html=True)
 
 for i, deck in enumerate(decks):
-    column = col1 if i % 2 == 0 else col2
+    if i%3 == 0:
+        column = col1
+    if i%3 == 1:
+        column = col2
+    if i%3 == 2:
+        column = col3
     with column:
         card_count = sum(card["qty"] for card in deck["cards"])
 
-        with st.expander(f"{deck['name']}  ·  {deck['format']}  ·  {card_count} cards"):
+        with st.container(border = True):
+            st.header(f"{deck['name']}")
+            st.write(f"{deck['format']}  ·  {card_count} cards")
             with st.container(border = True):
                 st.caption("Preview")
-                image_url = (deck["cards"][0].get("image_uris") or {}).get("normal")
-                if not image_url:
-                    faces = deck["cards"][0].get("card_faces") or []
-                    if faces:
-                        image_url = (
-                            (faces[0].get("image_uris") or {}).get("normal")
-                        )          
-                if image_url:
-                    st.image(image_url, width = 150)
-                else:
-                    st.caption("Image unavailable (This may be a basic land)")
-                    st.image(image_url, width = 150)
+                col1Img, col2Img, col3Img = st.columns([1, 1, 1])
+                with col1Img:
+                    image_url = (deck["cards"][0].get("image_uris") or {}).get("normal")
+                    if not image_url:
+                        faces = deck["cards"][0].get("card_faces") or []
+                        if faces:
+                            image_url = (
+                                (faces[0].get("image_uris") or {}).get("normal")
+                            )          
+                    if image_url:
+                        st.image(image_url, width = 150)
+                    else:
+                        st.caption("Image unavailable")
+                        st.image(image_url, width = 150)
+                with col2Img:
+                    image_url = (deck["cards"][1].get("image_uris") or {}).get("normal")
+                    if not image_url:
+                        faces = deck["cards"][1].get("card_faces") or []
+                        if faces:
+                            image_url = (
+                                (faces[0].get("image_uris") or {}).get("normal")
+                            )          
+                    if image_url:
+                        st.image(image_url, width = 150)
+                    else:
+                        st.caption("Image unavailable")
+                        st.image(image_url, width = 150)
+                with col3Img:
+                    image_url = (deck["cards"][2].get("image_uris") or {}).get("normal")
+                    if not image_url:
+                        faces = deck["cards"][2].get("card_faces") or []
+                        if faces:
+                            image_url = (
+                                (faces[0].get("image_uris") or {}).get("normal")
+                            )          
+                    if image_url:
+                        st.image(image_url, width = 150)
+                    else:
+                        st.caption("Image unavailable")
+                        st.image(image_url, width = 150)
             st.write(f"**Colors:** {deck['colors']}")
-            st.write(f"**Strategy:** {deck['strategy']}")
+            strat = deck["strategy"]
+
+            st.markdown(
+                f"""
+                <div style="
+                display: -webkit-box;
+                -webkit-line-clamp: 3;
+                -webkit-box-orient: vertical;
+                overflow: hidden;                    
+                text-overflow: ellipsis;
+                ">
+                    {strat}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
             st.write(f"**Saved:** {deck['created_at']}")
 
             if deck["cards"]:
