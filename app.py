@@ -101,6 +101,14 @@ strategy = st.text_area(
     placeholder="Example: A deck with both control and aggro cards",
 )
 
+budget = st.number_input(
+    "Cost of deck?
+    min_value=0.0,
+    max_value=10000.0,
+    value=0.0,
+    step=5.0,
+)
+
 # Create a new deck
 if st.button("Generate Deck"):
     if not strategy.strip():
