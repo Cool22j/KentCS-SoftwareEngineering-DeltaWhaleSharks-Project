@@ -29,6 +29,7 @@ CARD_FIELDS = {
     "legalities": 1,
     "edhrec_rank": 1,
     "penny_rank": 1,
+    "prices": 1,
 }
 
 ALLOWED_FIELDS = {
@@ -486,7 +487,7 @@ def _cleanup_and_add_lands(state):
     }
 
 
-def get_recommendations(question, format="modern", colors=None, progress=None):
+def get_recommendations(question, format="modern", colors=None, progress=None, budget=None):
     """Run the LangChain deck-building chain and return a finished deck."""
     if not isinstance(question, str) or len(question.strip()) < 3:
         raise ValueError("Please describe the deck strategy you want to build.")
@@ -515,4 +516,5 @@ def get_recommendations(question, format="modern", colors=None, progress=None):
         "model": model,
         "headers": headers,
         "progress": progress,
+        "budget": budget,
     })
