@@ -102,7 +102,7 @@ strategy = st.text_area(
 )
 
 budget = st.number_input(
-    "Cost of deck?
+    "Cost of deck?",
     min_value=0.0,
     max_value=10000.0,
     value=0.0,
@@ -125,6 +125,7 @@ if st.button("Generate Deck"):
                 format=deck_format,
                 colors=colors,
                 progress=progress.info,
+                budget=budget if budget > 0 else None,
             )
             progress.empty()
             st.session_state["deck"] = {
@@ -175,6 +176,14 @@ if st.session_state["deck"] is not None:
         st.metric("Total Cards", total_cards)
     with col2:
         st.metric("Unique Cards", len(cards))
+
+    # Estimated cost of deck
+    total_cost = sum(
+        float(card.get("USD_price", 0) or 0) * card.get("qty", 1)
+        for card in cards
+    )
+    if total_cost > 0:
+        st.metric("Estimated Cost", f"${total_cost:.2f} USD")
 
     # Add cards to the deck
     st.subheader("Add Cards")
