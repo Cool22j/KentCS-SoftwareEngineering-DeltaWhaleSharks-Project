@@ -334,7 +334,7 @@ def _select_cards_with_llm(state):
 
     pool_limit = 22 if is_commander else 16
     candidate_lines = [
-        f"- {c['name']} ({c.get('mana_cost', '')}, {c.get('type_line', '').split('—')[0].strip()}): {(c.get('oracle_text') or '').replace(chr(10), ' ')[:55]}"
+        f"- {c['name']} ({c.get('mana_cost', '')}, {c.get('type_line', '').split('—')[0].strip()}): {(c.get('oracle_text') or '').replace(chr(10), ' ')[:55]} [${c.get('prices', {}).get('usd', '?')}]"
         for c in state["candidates"][:pool_limit]
     ]
 
@@ -350,7 +350,12 @@ def _select_cards_with_llm(state):
         + "\n".join(candidate_lines)
         + "\n\n"
         f"{commander_rule} "
-        "Do not count total deck size; Python fills remaining slots and lands automatically.\n"
+        + (
+            f"Total deck budget is ${state['budget']:.2f} USD — each candidate shows its price in brackets. "
+            "Multiply price by quantity and keep the running total under budget. Prefer cheaper cards when budget is tight. "
+            if state.get("budget") else ""
+        )
+        + "Do not count total deck size; Python fills remaining slots and lands automatically.\n"
         "Return ONLY JSON:\n"
         f'{{"query": "1-2 sentence explanation of how the deck works", "output": {{"land_count": {default_lands}, "cards": [{{"name": "Exact Name from Candidates", "qty": {max_copies}, "role": "2-4 word role"}}]}}}}\n'
     )
@@ -404,6 +409,18 @@ def _cleanup_and_add_lands(state):
         card = by_name.get(raw_name.lower())
         if not card or card["name"] in seen:
             continue
+        if state.get("budget"):
+            usd_price = card.get("prices", {}).get("usd")
+            if usd_price:
+                try:
+                    current_cost =sum(
+                        float(by_name.get(c["name"].lower(), {}).get("prices", {}).get("usd") or 0) * c["qty"]
+                        for c in cleaned
+                    )
+                    if current_cost + float(usd_price) * int(item.get("qty", 1)) > state["budget"]:
+                        continue
+                except (ValueError, TypeError):
+                    pass
         try:
             qty = int(item.get("qty", 1))
         except (ValueError, TypeError):
@@ -421,6 +438,7 @@ def _cleanup_and_add_lands(state):
             "popularity_rank": rank if rank < 999999 else None,
             "image_uris": card.get("image_uris"),
             "card_faces": card.get("card_faces"),
+            "usd_price": card.get("prices", {}).get("usd"),
         })
         seen.add(card["name"])
         if not is_land:
@@ -443,6 +461,7 @@ def _cleanup_and_add_lands(state):
             "popularity_rank": rank if rank < 999999 else None,
             "image_uris": card.get("image_uris"),
             "card_faces": card.get("card_faces"),
+            "usd_price": card.get("prices", {}).get("usd"),
         })
         seen.add(card["name"])
         current_spells += qty
