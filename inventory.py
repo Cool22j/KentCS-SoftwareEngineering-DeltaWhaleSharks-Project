@@ -77,7 +77,7 @@ for i, deck in enumerate(decks):
                         st.image(image_url, width = 150)
                     else:
                         st.caption("Image unavailable")
-                        st.image(image_url, width = 150)
+                        #st.image(image_url, width = 150)
                 with col3Img:
                     image_url = (deck["cards"][2].get("image_uris") or {}).get("normal")
                     if not image_url:
@@ -111,13 +111,18 @@ for i, deck in enumerate(decks):
 
             st.write(f"**Saved:** {deck['created_at']}")
 
+            deck_cost = sum(float(card.get("usd_price", 0) or 0) * card.get("qty", 1) for card in deck["cards"])
+            if deck_cost > 0:
+                st.write(f"**Estimated Cost:** ${deck_cost:.2f} USD")
+
             if deck["cards"]:
                 with st.expander(label = "See All Cards", expanded = False, width= "stretch"):
                     display = [
                         {
                             "Name": card["name"],
                             "Quantity": card["qty"],
-                            "Role": card.get("role", "")
+                            "Role": card.get("role", ""),
+                            "Price (USD)": f"${float(card.get('usd_price', 0) or 0):.2f}"
                         }
                         for card in deck["cards"]
                     ]
