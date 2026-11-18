@@ -351,8 +351,11 @@ def _select_cards_with_llm(state):
         + "\n\n"
         f"{commander_rule} "
         + (
-            f"Total deck budget is ${state['budget']:.2f} USD — each candidate shows its price in brackets. "
-            "Multiply price by quantity and keep the running total under budget. Prefer cheaper cards when budget is tight. "
+            f"Total deck budget is ${state['budget']:.2f} USD — try to spend between "
+            f"${state['budget'] * 0.8:.2f} and ${state['budget']:.2f}. "
+            "Each candidate shows its price in brackets. "
+            "Multiply price by quantity and keep the running total under budget. "
+            "Prefer higher quality cards when budget allows. "
             if state.get("budget") else ""
         )
         + "Do not count total deck size; Python fills remaining slots and lands automatically.\n"
