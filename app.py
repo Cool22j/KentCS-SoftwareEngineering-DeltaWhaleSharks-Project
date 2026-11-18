@@ -179,12 +179,21 @@ if st.session_state["deck"] is not None:
 
     # Estimated cost of deck
     total_cost = sum(
-        float(card.get("USD_price", 0) or 0) * card.get("qty", 1)
+        float(card.get("usd_price", 0) or 0) * card.get("qty", 1)
         for card in cards
     )
     if total_cost > 0:
-        st.metric("Estimated Cost", f"${total_cost:.2f} USD")
-
+        if budget > 0:
+            remaining = budget - total_cost
+            st.metric(
+                "Estimated Cost",
+                f"${total_cost:.2f} USD",
+                delta=f"${abs(remaining):.2f} {'under' if remaining >= 0 else 'over'} budget",
+                delta_color="normal" if remaining >= 0 else "inverse",
+            )
+        else:
+            st.metric("Estimated Cost", f"${total_cost:.2f} USD")
+            
     # Add cards to the deck
     st.subheader("Add Cards")
 
