@@ -9,6 +9,7 @@ import database as db
 import user_database as udb
 from pages import edit
 from search import get_card_image_url
+from owned import load_owned_counts, owned_badge, owned_qty, deck_owned_summary
 
 PREVIEW_CARDS = 3
 GRID_COLUMNS = 5
@@ -50,7 +51,7 @@ def image_for(card):
     return get_card_image_url(card) or (lookup_image_url(card["name"]) if card.get("name") else None)
 
 
-def show_card_tile(card):
+def show_card_tile(card, owned_counts):
     """One card in the grid: the image, or a placeholder box with the name if there is none."""
     image_url = image_for(card)
     if image_url:
@@ -69,6 +70,7 @@ def show_card_tile(card):
     st.markdown(f"**{card['qty']}×** {card.get('name', 'Unknown')}")
     if card.get("role"):
         st.caption(str(card["role"]).capitalize())
+    owned_badge(owned_counts, card.get("name"), needed=card["qty"])
 
 
 @st.dialog("Deck list", width="large")
@@ -77,6 +79,7 @@ def show_deck_cards(deck):
     total = sum(card["qty"] for card in cards)
     st.subheader(deck["name"])
     st.caption(f"{deck['format']}  ·  {total} cards  ·  {len(cards)} unique")
+    owned_counts = load_owned_counts()
 
     view = st.segmented_control(
         "View",
@@ -88,7 +91,12 @@ def show_deck_cards(deck):
 
     if view == "List":
         st.table([
-            {"Name": card["name"], "Quantity": card["qty"], "Role": card.get("role", "")}
+            {
+                "Name": card["name"],
+                "Quantity": card["qty"],
+                "Owned": owned_qty(owned_counts, card["name"]),
+                "Role": card.get("role", ""),
+            }
             for card in cards
         ])
         return
@@ -97,7 +105,7 @@ def show_deck_cards(deck):
         row = st.columns(GRID_COLUMNS)
         for column, card in zip(row, cards[start:start + GRID_COLUMNS]):
             with column:
-                show_card_tile(card)
+                show_card_tile(card, owned_counts)
 
 
 try:
@@ -109,6 +117,7 @@ except (pymongo.errors.PyMongoError, RuntimeError) as error:
 if not decks:
     st.info("No saved decks yet. Build one on the Deck Builder page!")
 
+owned_counts = load_owned_counts()
 deck_columns = st.columns(3)
 
 for i, deck in enumerate(decks):
@@ -118,6 +127,9 @@ for i, deck in enumerate(decks):
         with st.container(border=True):
             st.header(deck["name"])
             st.write(f"{deck['format']}  ·  {card_count} cards")
+            if owned_counts:
+                owned_copies, _ = deck_owned_summary(owned_counts, deck["cards"])
+                st.caption(f"You own {owned_copies} of {card_count} cards")
 
             # Preview: the first few cards that have a picture
             preview_urls = []

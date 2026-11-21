@@ -3,6 +3,7 @@ import pymongo
 import user_database as udb
 from pages import deckInventory
 from search import search
+from owned import load_owned_counts, owned_badge, deck_owned_summary
 
 
 deck = st.session_state.get("deckToEdit")
@@ -57,6 +58,11 @@ with st.container(border=True):
 
 st.subheader("Cards:")
 
+owned_counts = load_owned_counts()
+owned_copies, total_copies = deck_owned_summary(owned_counts, deck["cards"])
+if owned_counts:
+    st.caption(f"You own {owned_copies} of the {total_copies} cards in this deck.")
+
 outCol1, outCol2, outCol3 = st.columns([1, 1, 1], gap = "small")
 
 for i, card in enumerate(deck["cards"]):
@@ -88,7 +94,8 @@ for i, card in enumerate(deck["cards"]):
                     else:
                         st.caption("Image unavailable (This may be a basic land)")
                     st.caption(f"X {card['qty']}")
-                    st.caption(f"Role: {card["role"]}")
+                    st.caption(f"Role: {card.get('role') or '—'}")
+                    owned_badge(owned_counts, card["name"], needed=card["qty"])
 
 
                 with col3:
@@ -124,7 +131,8 @@ for i, card in enumerate(deck["cards"]):
                         st.caption("Image unavailable (This may be a basic land)")
                     st.caption(f"X {card['qty']}")
                     
-                    st.caption(f"Role: {card["role"]}")
+                    st.caption(f"Role: {card.get('role') or '—'}")
+                    owned_badge(owned_counts, card["name"], needed=card["qty"])
 
 
                 with col3:
@@ -159,7 +167,8 @@ for i, card in enumerate(deck["cards"]):
                     else:
                         st.caption("Image unavailable (This may be a basic land)")
                     st.caption(f"X {card['qty']}")
-                    st.caption(f"Role: {card["role"]}")
+                    st.caption(f"Role: {card.get('role') or '—'}")
+                    owned_badge(owned_counts, card["name"], needed=card["qty"])
 
 
                 with col3:
