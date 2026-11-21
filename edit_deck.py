@@ -57,12 +57,12 @@ with st.container(border=True):
 
 st.subheader("Cards:")
 
-outCol1, outCol2 = st.columns([1, 1])
+outCol1, outCol2, outCol3 = st.columns([1, 1, 1], gap = "small")
 
 for i, card in enumerate(deck["cards"]):
-    if i%2 == 0:
+    if i%3 == 0:
         with outCol1:
-            with st.container(border=True, width = 300):
+            with st.container(border=True, width = 500):
 
                 col1, col2, col3 = st.columns([1, 3, 1])
 
@@ -95,9 +95,9 @@ for i, card in enumerate(deck["cards"]):
                     if st.button("+", key=f"add_{i}"):
                         card["qty"] += 1
                         st.rerun()
-    else:
+    elif i%3 == 1:
         with outCol2:
-            with st.container(border=True, width = 300):
+            with st.container(border=True, width = 500):
 
                 col1, col2, col3 = st.columns([1, 3, 1])
 
@@ -124,6 +124,41 @@ for i, card in enumerate(deck["cards"]):
                         st.caption("Image unavailable (This may be a basic land)")
                     st.caption(f"X {card['qty']}")
                     
+                    st.caption(f"Role: {card["role"]}")
+
+
+                with col3:
+                    if st.button("+", key=f"add_{i}"):
+                        card["qty"] += 1
+                        st.rerun()
+    else:
+        with outCol3:
+            with st.container(border=True, width = 500):
+
+                col1, col2, col3 = st.columns([1, 3, 1])
+
+                with col1:
+                    if st.button("−", key=f"remove_{i}"):
+                        if card["qty"] > 1:
+                            card["qty"] -= 1
+                        else:
+                            deck["cards"].remove(card)
+
+                        st.rerun()
+
+                with col2:
+                    image_url = (card.get("image_uris") or {}).get("normal")
+                    if not image_url:
+                        faces = card.get("card_faces") or []
+                        if faces:
+                            image_url = (
+                                (faces[0].get("image_uris") or {}).get("normal")
+                            )          
+                    if image_url:
+                        st.image(image_url, use_container_width=True)
+                    else:
+                        st.caption("Image unavailable (This may be a basic land)")
+                    st.caption(f"X {card['qty']}")
                     st.caption(f"Role: {card["role"]}")
 
 

@@ -1,10 +1,17 @@
 
+import html
+import re
+
 import streamlit as st
 import pymongo
+
+import database as db
 import user_database as udb
 from pages import edit
 from search import get_card_image_url
 
+PREVIEW_CARDS = 3
+GRID_COLUMNS = 5
 
 st.markdown(
     "<h1 style='text-align: center;'>Your Decks</h1>",
@@ -15,12 +22,83 @@ user_id = st.session_state.get("user_id")
 
 if not user_id:
     st.info("Log in to see your saved decks.")
-    st.page_link(
-        "login.py",
-        label="Log In / Register",
-        icon=":material/person:",
-    )
+    st.page_link("login.py", label="Log In / Register", icon=":material/person:")
     st.stop()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def lookup_image_url(name):
+    """Find an image in the card catalog for cards saved without one (e.g. typed in by hand)."""
+    try:
+        card = db.get_cards_collection().find_one(
+            {
+                "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"},
+                "lang": "en",
+                "$or": [
+                    {"image_uris": {"$exists": True}},
+                    {"card_faces.image_uris": {"$exists": True}},
+                ],
+            },
+            {"image_uris": 1, "card_faces": 1},
+        )
+    except (pymongo.errors.PyMongoError, RuntimeError):
+        return None
+    return get_card_image_url(card) if card else None
+
+
+def image_for(card):
+    return get_card_image_url(card) or (lookup_image_url(card["name"]) if card.get("name") else None)
+
+
+def show_card_tile(card):
+    """One card in the grid: the image, or a placeholder box with the name if there is none."""
+    image_url = image_for(card)
+    if image_url:
+        st.image(image_url, width="stretch")
+    else:
+        st.markdown(
+            f"""
+            <div style="aspect-ratio: 63 / 88; border: 1px solid rgba(250,250,250,0.2);
+                        border-radius: 10px; display: flex; align-items: center;
+                        justify-content: center; text-align: center; padding: 8px;">
+                {html.escape(card.get("name", "Unknown"))}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    st.markdown(f"**{card['qty']}×** {card.get('name', 'Unknown')}")
+    if card.get("role"):
+        st.caption(str(card["role"]).capitalize())
+
+
+@st.dialog("Deck list", width="large")
+def show_deck_cards(deck):
+    cards = deck["cards"]
+    total = sum(card["qty"] for card in cards)
+    st.subheader(deck["name"])
+    st.caption(f"{deck['format']}  ·  {total} cards  ·  {len(cards)} unique")
+
+    view = st.segmented_control(
+        "View",
+        ["Cards", "List"],
+        default="Cards",
+        key=f"view_{deck['_id']}",
+        label_visibility="collapsed",
+    )
+
+    if view == "List":
+        st.table([
+            {"Name": card["name"], "Quantity": card["qty"], "Role": card.get("role", "")}
+            for card in cards
+        ])
+        return
+
+    for start in range(0, len(cards), GRID_COLUMNS):
+        row = st.columns(GRID_COLUMNS)
+        for column, card in zip(row, cards[start:start + GRID_COLUMNS]):
+            with column:
+                show_card_tile(card)
+
 
 try:
     decks = udb.get_decks(user_id)
@@ -31,129 +109,69 @@ except (pymongo.errors.PyMongoError, RuntimeError) as error:
 if not decks:
     st.info("No saved decks yet. Build one on the Deck Builder page!")
 
-col1, col2 = st.columns(2)
-
-st.markdown("""
-<style>
-div[data-testid="stExpander"]:not(:has(div[data-testid="stExpander"])) {
-    border-radius: 16px;
-    width: 300px;
-    max-width: 100%;
-    margin-bottom: 8px;
-}
-</style>
-""", unsafe_allow_html=True)
+deck_columns = st.columns(3)
 
 for i, deck in enumerate(decks):
-    column = col1 if i % 2 == 0 else col2
+    with deck_columns[i % 3]:
+        card_count = sum(card["qty"] for card in deck["cards"])
 
-    with column:
+        with st.container(border=True):
+            st.header(deck["name"])
+            st.write(f"{deck['format']}  ·  {card_count} cards")
 
-        cards = deck.get("cards", [])
-        card_count = sum(card["qty"] for card in cards)
+            # Preview: the first few cards that have a picture
+            preview_urls = []
+            for card in deck["cards"]:
+                url = image_for(card)
+                if url:
+                    preview_urls.append(url)
+                if len(preview_urls) == PREVIEW_CARDS:
+                    break
 
-        with st.expander(
-            f"{deck['name']}  ·  {deck['format']}  ·  {card_count} cards"
-        ):
-
-            # Show deck preview
             with st.container(border=True):
                 st.caption("Preview")
-
-                image_url = (
-                    get_card_image_url(cards[0])
-                    if cards else None
-                )
-
-                if image_url:
-                    st.image(image_url, width=150)
+                if preview_urls:
+                    for column, url in zip(st.columns(PREVIEW_CARDS), preview_urls):
+                        with column:
+                            st.image(url, width="stretch")
                 else:
-                    st.caption("Image unavailable")
+                    st.caption("No card images available")
 
             st.write(f"**Colors:** {deck['colors']}")
-            st.write(f"**Strategy:** {deck['strategy']}")
+
+            st.markdown(
+                f"""
+                <div style="
+                display: -webkit-box;
+                -webkit-line-clamp: 3;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                ">
+                    {html.escape(str(deck["strategy"]))}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
             st.write(f"**Saved:** {deck['created_at']}")
 
-            # Display all cards visually
-            if cards:
-
-                with st.expander(
-                    label="See All Cards",
-                    expanded=False,
-                    width="stretch",
-                ):
-
-                    st.caption(f"Total Cards: {card_count}")
-                    st.caption(f"Unique Cards: {len(cards)}")
-
-                    # Create two columns for card images
-                    card_columns = st.columns(2)
-
-                    for j, card in enumerate(cards):
-
-                        with card_columns[j % 2]:
-
-                            with st.container(border=True):
-
-                                card_image = get_card_image_url(card)
-
-                                # Display card image
-                                if card_image:
-                                    st.image(
-                                        card_image,
-                                        use_container_width=True,
-                                    )
-                                else:
-                                    st.caption("Image unavailable")
-
-                                # Display card name
-                                st.write(
-                                    card.get("name", "Unknown Card")
-                                )
-
-                                # Display card quantity
-                                st.caption(
-                                    f"Quantity: {card.get('qty', 1)}"
-                                )
-
-                                # Display card role if available
-                                role = card.get("role")
-
-                                if role:
-                                    st.caption(f"Role: {role}")
-
+            if deck["cards"]:
+                if st.button("See all cards", key=f"cards_{deck['_id']}", width="stretch"):
+                    show_deck_cards(deck)
             else:
                 st.caption("This deck has no cards yet.")
 
-            # Existing edit and delete functionality
             buttonCol1, buttonCol2 = st.columns(2)
-
             with buttonCol1:
-
-                if st.button(
-                    "Delete deck",
-                    key=f"delete_{deck['_id']}",
-                ):
-
+                if st.button("Delete deck", key=f"delete_{deck['_id']}"):
                     try:
                         udb.delete_deck(deck["_id"], user_id)
-
-                    except (
-                        pymongo.errors.PyMongoError,
-                        RuntimeError,
-                    ) as error:
-
+                    except (pymongo.errors.PyMongoError, RuntimeError) as error:
                         st.error(f"Could not delete deck: {error}")
-
                     else:
                         st.rerun()
-
             with buttonCol2:
-
-                if st.button(
-                    "Edit deck",
-                    key=f"edit_{deck['_id']}",
-                ):
-
+                if st.button("Edit deck", key=f"edit_{deck['_id']}"):
                     st.session_state["deckToEdit"] = deck
                     st.switch_page(edit)
