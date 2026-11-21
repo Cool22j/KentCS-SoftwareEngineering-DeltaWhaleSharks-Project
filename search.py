@@ -2,6 +2,7 @@ import html
 import streamlit as st
 import database as db
 import pymongo
+from owned import load_owned_counts, owned_badge
 
 CARDS_PER_ROW = 7
 ROWS_PER_PAGE = 3
@@ -451,6 +452,8 @@ def show_focused_card(card, isEditing=False, deck=None, prefix="landing_"):
                 f"<div style='font-size: 12px; opacity: 0.7;'>No Image Available</div></div>",
                 unsafe_allow_html=True,
             )
+
+        owned_badge(load_owned_counts(), card.get("name"))
 
         if has_two_image_faces:
             def _flip_face():

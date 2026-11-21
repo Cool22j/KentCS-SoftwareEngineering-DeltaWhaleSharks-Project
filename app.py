@@ -7,6 +7,7 @@ import streamlit.components.v1 as components
 import base64
 from pathlib import Path
 import database as db
+from owned import load_owned_counts, owned_badge, deck_owned_summary
 
 def get_card_image_url(card):
     #extract image URL from Scryfall API
@@ -162,11 +163,16 @@ if st.session_state["deck"] is not None:
     # Count all the cards in the deck
     total_cards = sum(card["qty"] for card in cards)
 
-    col1, col2 = st.columns(2)
+    owned_counts = load_owned_counts()
+    owned_copies, _ = deck_owned_summary(owned_counts, cards)
+
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total Cards", total_cards)
     with col2:
         st.metric("Unique Cards", len(cards))
+    with col3:
+        st.metric("In Your Collection", f"{owned_copies} / {total_cards}")
 
     # Add cards to the deck
     st.subheader("Add Cards")
@@ -217,6 +223,7 @@ if st.session_state["deck"] is not None:
                 caption_parts.append(f"Popularity Rank #{card['popularity_rank']:,}")
             if caption_parts:
                 st.caption(" · ".join(caption_parts))
+            owned_badge(owned_counts, card["name"], needed=card["qty"])
 
         #decrease quantity button
         with col3:
