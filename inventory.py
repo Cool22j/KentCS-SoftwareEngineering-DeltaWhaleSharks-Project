@@ -187,3 +187,10 @@ for i, deck in enumerate(decks):
                 if st.button("Edit deck", key=f"edit_{deck['_id']}"):
                     st.session_state["deckToEdit"] = deck
                     st.switch_page(edit)
+
+            #add tags
+            tags = deck.get("tags", [])
+            if tags:
+                st.write("Tags: " + " · ".join(tags))
+            else:
+                st.caption("No tags")

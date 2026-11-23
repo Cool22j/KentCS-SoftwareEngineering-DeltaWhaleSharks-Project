@@ -483,6 +483,7 @@ def _cleanup_and_add_lands(state):
         "format": state["format"],
         "colors": colors,
         "total_cards": sum(c["qty"] for c in cleaned),
+        "tags": []
     }
 
 

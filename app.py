@@ -127,6 +127,7 @@ if st.button("Generate Deck"):
                 "strategy": result["strategy"],
                 "search_logs": result.get("search_logs", []),
                 "cards": result["cards"],
+                "tags": [],
             }
             st.success(f"Generated a {result['total_cards']}-card deck!")
         except (ValueError, RuntimeError, requests.RequestException, pymongo.errors.PyMongoError) as error:
@@ -247,6 +248,7 @@ if st.session_state["deck"] is not None:
                 cards.pop(i)
                 st.rerun()
 
+
     # Save the deck to MongoDB
     user_id = st.session_state.get("user_id")
 
@@ -268,6 +270,7 @@ if st.session_state["deck"] is not None:
                     colors=deck["colors"],
                     strategy=deck["strategy"],
                     deck_cards=cards,
+                    tags = deck.get("tags", [])
                 )
                 if updated:
                     st.success("Deck updated!")
@@ -279,6 +282,7 @@ if st.session_state["deck"] is not None:
                         strategy=deck["strategy"],
                         deck_cards=cards,
                         user_id=user_id,
+                        tags = deck.get("tags", [])
                     )
                     st.success("Deck saved successfully!")
             except (pymongo.errors.PyMongoError, RuntimeError, ValueError) as error:

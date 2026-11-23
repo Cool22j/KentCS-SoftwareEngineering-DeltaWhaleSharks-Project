@@ -1,7 +1,12 @@
 import pymongo
 import streamlit as st
+import streamlit.components.v1 as components
 
+import user_database as udb
 import users
+
+COOKIE_NAME = "cardshark_session"
+SESSION_SECONDS = udb.SESSION_DAYS * 24 * 3600
 
 st.markdown(
     "<h1 style='text-align: center;'>Your Account</h1>",
@@ -13,6 +18,29 @@ def _sign_in(user):
     """Remember the logged-in user for this session."""
     st.session_state["user_id"] = user["_id"]
     st.session_state["username"] = user["username"]
+    try:
+        token = udb.create_session(user["_id"])
+    except (pymongo.errors.PyMongoError, RuntimeError):
+        return None
+    st.session_state["session_token"] = token
+    return token
+
+
+def _finish_login(token):
+    """Write the cookie from the browser, then let the user continue."""
+    if not token:
+        st.switch_page("landing.py")
+    components.html(
+        f"""<script>
+        const secure = window.parent.location.protocol === "https:" ? "; Secure" : "";
+        window.parent.document.cookie =
+            "{COOKIE_NAME}={token}; max-age={SESSION_SECONDS}; path=/; SameSite=Lax" + secure;
+        </script>""",
+        height=0,
+    )
+    st.success("Signed in!")
+    st.page_link("landing.py", label="Continue to Card Shark", icon=":material/home:")
+    st.stop()
 
 
 # If already logged in, show the account and a logout button.
@@ -26,7 +54,12 @@ if st.session_state.get("user_id"):
             st.switch_page("inventory.py")
     with col2:
         if st.button("Log out", use_container_width=True):
-            for key in ("user_id", "username", "deck"):
+            token = st.session_state.get("session_token") or st.context.cookies.get(COOKIE_NAME)
+            try:
+                udb.delete_session(token)
+            except (pymongo.errors.PyMongoError, RuntimeError):
+                pass
+            for key in ("user_id", "username", "deck", "session_token"):
                 st.session_state.pop(key, None)
             st.rerun()
     st.stop()
@@ -50,8 +83,7 @@ with tab_login:
             if user is None:
                 st.error("Incorrect email or password.")
             else:
-                _sign_in(user)
-                st.switch_page("landing.py")
+                _finish_login(_sign_in(user))
 
 # REGISTER
 
@@ -79,5 +111,4 @@ with tab_register:
             except (pymongo.errors.PyMongoError, RuntimeError) as error:
                 st.error(f"Could not create the account: {error}")
             else:
-                _sign_in(user)
-                st.switch_page("landing.py")
+                _finish_login(_sign_in(user))
