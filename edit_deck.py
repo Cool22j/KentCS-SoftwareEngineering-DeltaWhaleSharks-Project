@@ -8,6 +8,58 @@ from owned import load_owned_counts, owned_badge, deck_owned_summary
 
 deck = st.session_state.get("deckToEdit")
 
+#create tags method
+def createTag(current_tags = None):
+    #handle decks created before tagging was implemented
+    if current_tags is None:
+        current_tags = []
+    #create tag interface
+    tag_mode = st.segmented_control(
+        "Tag mode",
+        ["Existing", "Your Own"],
+        default="Existing",
+        selection_mode="single",
+        label_visibility="collapsed",
+        key=f"Tag_mode",
+    )
+
+    if tag_mode == "Existing":
+        possibleTags = [ 
+            "Aggressive",
+            "Defensive",
+            "Quick",
+            "High Cost"
+        ]
+
+        new_tag = st.multiselect(
+            "Select a tag",
+            options = possibleTags,
+            select_all = False,
+        )
+    #text input and multiselect return different datatypes. text input must be converted to a list
+    elif tag_mode == "Your Own":
+        new_tag = [st.text_input(
+            "Create your own tag",
+            placeholder="My tag",
+            key = "new_tag",
+        ).strip()]
+
+    if st.button("Add Tag", key = "add_tag"):
+        added = []
+        for tag in new_tag:
+            if tag not in current_tags:
+                current_tags.append(tag)
+                added.append(tag)
+
+        if added:
+            st.success(f"Added {new_tag}!")
+        elif new_tag:
+            st.warning("Tag already exists.")
+        st.rerun()
+    return current_tags
+
+
+
 colors= {
     "W": "255, 255, 220",  
     "U": "70, 130, 220",  
@@ -49,8 +101,15 @@ st.markdown(
 
 search(True, deck)
 
+#if a deck was created before the tag dict, add it in
+deck.setdefault("tags", [])
+
 st.write("Format:", deck["format"])
 st.write("Colors:", deck["colors"])
+st.write("Tags:", ", ".join(deck["tags"]))
+
+deck["tags"] = createTag(deck.get("tags", []))
+
 
 with st.container(border=True): 
     st.write("Strategy:", deck["strategy"])
@@ -193,6 +252,7 @@ if st.button("Save Deck", disabled=not user_id):
             colors=deck["colors"],
             strategy=deck["strategy"],
             deck_cards=cards,
+             tags=deck["tags"],
         )
         if updated:
             st.success("Deck updated!")
@@ -204,6 +264,7 @@ if st.button("Save Deck", disabled=not user_id):
                 strategy=deck["strategy"],
                 deck_cards=cards,
                 user_id=user_id,
+                tags=deck["tags"],
             )
             st.success("Deck saved successfully!")
     except (pymongo.errors.PyMongoError, RuntimeError, ValueError) as error:

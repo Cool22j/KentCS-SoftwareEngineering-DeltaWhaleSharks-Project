@@ -44,7 +44,7 @@ def get_user_decks_collection():
     return db.get_decks_collection()
 
 
-def save_deck(name, deck_format, colors, strategy, deck_cards, user_id):
+def save_deck(name, deck_format, colors, strategy, deck_cards, tags, user_id):
     """Save a new deck for a user and return its id."""
     if not user_id:
         raise ValueError("You must be logged in to save a deck.")
@@ -57,12 +57,13 @@ def save_deck(name, deck_format, colors, strategy, deck_cards, user_id):
         "colors": colors,
         "strategy": strategy,
         "cards": list(deck_cards),
+        "tags": tags or [],
         "created_at": datetime.now().isoformat(timespec="seconds"),
     })
     return deck_id
 
 
-def update_deck(deck_id, user_id, name, deck_format, colors, strategy, deck_cards):
+def update_deck(deck_id, user_id, name, deck_format, colors, strategy, deck_cards, tags):
     """Overwrite a deck, only if it belongs to the user. Returns True if it was found."""
     if not user_id:
         return False
@@ -75,6 +76,7 @@ def update_deck(deck_id, user_id, name, deck_format, colors, strategy, deck_card
             "strategy": strategy,
             "cards": list(deck_cards),
             "updated_at": datetime.now().isoformat(timespec="seconds"),
+            "tags": tags or [],
         }},
     )
     return result.matched_count > 0
