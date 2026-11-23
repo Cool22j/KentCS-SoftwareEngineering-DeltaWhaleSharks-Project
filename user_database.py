@@ -4,8 +4,10 @@ database.py keeps the connection and the card catalog; this file adds the
 users collection and the owner-scoped deck operations on top of it.
 """
 
+import hashlib
+import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 
 import database as db
@@ -200,3 +202,67 @@ def get_owned_counts(user_id):
         {"$group": {"_id": "$name", "qty": {"$sum": "$qty"}}},
     ]
     return {row["_id"]: row["qty"] for row in get_owned_cards_collection().aggregate(pipeline)}
+
+
+# Login sessions (keep the user logged in after F5 / new tab)
+# The browser cookie holds a random token. Only the SHA-256 hash of that token
+# is stored here, so a leaked database cannot be used to log in as someone.
+
+SESSION_DAYS = 14
+
+def _hash_token(token):
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+@lru_cache(maxsize=1)
+def _create_sessions_indexes():
+    """Create the indexes on the sessions collection (once per process)."""
+    sessions = db.get_database()["sessions"]
+    sessions.create_index("token_hash", unique=True)
+    sessions.create_index("user_id")
+    
+    # MongoDB deletes a session on its own once expires_at has passed.
+    sessions.create_index("expires_at", expireAfterSeconds=0)
+    return True
+
+
+def get_sessions_collection():
+    """Return the sessions collection with its indexes in place."""
+    _create_sessions_indexes()
+    return db.get_database()["sessions"]
+
+
+def create_session(user_id):
+    """Create a login session for the user and return the raw token for the cookie."""
+    if not user_id:
+        raise ValueError("A user is required to create a session.")
+    token = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    get_sessions_collection().insert_one({
+        "token_hash": _hash_token(token),
+        "user_id": user_id,
+        "created_at": now,
+        "expires_at": now + timedelta(days=SESSION_DAYS),
+    })
+    return token
+
+
+def get_session_user_id(token):
+    """Return the user_id for a valid, non-expired token, else None."""
+    if not token or not isinstance(token, str):
+        return None
+    doc = get_sessions_collection().find_one({"token_hash": _hash_token(token)})
+    if not doc:
+        return None
+    expires = doc["expires_at"]
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if expires < datetime.now(timezone.utc):
+        return None
+    return doc["user_id"]
+
+
+def delete_session(token):
+    """Delete the session for this token (logout)."""
+    if token and isinstance(token, str):
+        get_sessions_collection().delete_one({"token_hash": _hash_token(token)})
