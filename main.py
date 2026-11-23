@@ -30,7 +30,7 @@ st.logo("logo.png", size="large")
 
 # create navigation bar
 nv = st.navigation(
-    [landing, rules, beginner, deckBuilder, deckInventory, cardCollection, account, edit],
+    [landing, rules, deckBuilder, deckInventory, cardCollection, account, edit],
     position="top",
 )
 nv.run()

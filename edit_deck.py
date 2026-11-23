@@ -106,9 +106,10 @@ deck.setdefault("tags", [])
 
 st.write("Format:", deck["format"])
 st.write("Colors:", deck["colors"])
-st.write("Tags:", ", ".join(deck["tags"]))
+with st.container(border = True):
+    st.write("Tags:", ", ".join(deck["tags"]))
 
-deck["tags"] = createTag(deck.get("tags", []))
+    deck["tags"] = createTag(deck.get("tags", []))
 
 
 with st.container(border=True): 
