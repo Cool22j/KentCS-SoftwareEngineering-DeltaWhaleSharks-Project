@@ -3,9 +3,7 @@ import pymongo
 import requests
 import user_database as udb
 from recommendation import get_recommendations
-import streamlit.components.v1 as components
-import base64
-from pathlib import Path
+from rocky import get_model as get_rocky_model
 import database as db
 from owned import load_owned_counts, owned_badge, deck_owned_summary
 
@@ -55,231 +53,227 @@ def attach_card_image(card):
             break
     return card
 
-# Function to display the looping loading animation
-def loading():
-    video_path = Path(__file__).parent / "0000-0018.mp4"
-    video_data = base64.b64encode(video_path.read_bytes()).decode("utf-8")
-
-    components.html(
-        f"""
-        <div style="display:flex; justify-content:center;">
-            <video autoplay loop playsinline
-                   style="width:220px; max-width:100%;">
-                <source
-                    src="data:video/mp4;base64,{video_data}"
-                    type="video/mp4">
-            </video>
-        </div>
-        """,
-        height=180,
-    )
-
-    
 
 st.title("MTG Deck Builder")
-st.write("Create a Magic: The Gathering deck using Card Shark.")
 
-# Store the deck so it doesn't disappear when a button is clicked
+# Initialize Rocky model in session state
+if "rocky_model" not in st.session_state:
+    try:
+        st.session_state["rocky_model"] = get_rocky_model()
+    except (RuntimeError, requests.RequestException):
+        st.session_state["rocky_model"] = None
+
+# Initialize chat history and deck state
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 if "deck" not in st.session_state:
     st.session_state["deck"] = None
 
-st.subheader("Build Your Deck")
-
-deck_name = st.text_input("Deck Name")
-
-colors = st.text_input(
-    "Colors (optional)",
-    placeholder="Examples: Dimir, blue-black, U B, or leave blank to let AI choose",
-)
-
-deck_format = st.selectbox(
-    "Format",
-    ["Standard", "Modern", "Commander", "Pioneer", "Legacy", "Vintage", "Pauper"],
-)
-
-strategy = st.text_area(
-    "What kind of deck do you want?",
-    placeholder="Example: A deck with both control and aggro cards",
-)
-
-# Create a new deck
-if st.button("Generate Deck"):
-    if not strategy.strip():
-        st.warning("Please enter a deck strategy")
-    else:
-        loader = st.empty()
-        progress = st.empty()
-        try:
-            with loader.container():
-                loading()
-           
-            result = get_recommendations(
-                strategy,
-                format=deck_format,
-                colors=colors,
-                progress=progress.info,
-            )
-            progress.empty()
-            st.session_state["deck"] = {
-                "name": deck_name.strip() or "Untitled Deck",
-                "colors": ", ".join(result["colors"]),
-                "format": deck_format,
-                "strategy": result["strategy"],
-                "search_logs": result.get("search_logs", []),
-                "cards": result["cards"],
-            }
-            st.success(f"Generated a {result['total_cards']}-card deck!")
-        except (ValueError, RuntimeError, requests.RequestException, pymongo.errors.PyMongoError) as error:
-            progress.empty()
-            st.error(f"Could not generate deck: {error}")
-        loader.empty()
-        progress.empty()
-
-# Show the deck after it is created
-if st.session_state["deck"] is not None:
-
-    deck = st.session_state["deck"]
-    cards = deck["cards"]
-
-    st.subheader("Your Deck")
-
-    st.write("Deck Name:", deck["name"])
-    st.write("Format:", deck["format"])
-    st.write("Colors:", deck["colors"])
-    st.write("Strategy:", deck["strategy"])
-
-    if deck.get("search_logs"):
-        with st.expander("Database searches run by the chain"):
-            for log_entry in deck["search_logs"]:
-                st.write(f"- {log_entry}")
-
-    st.download_button(
-        "Download deck list",
-        "\n".join(f"{c['qty']} {c['name']}" for c in cards),
-        file_name="deck.txt",
-        mime="text/plain",
+# Compact deck settings bar
+set_col1, set_col2, set_col3 = st.columns([2, 2, 1.5])
+with set_col1:
+    deck_name = st.text_input("Deck Name", placeholder="Untitled Deck")
+with set_col2:
+    colors = st.text_input(
+        "Colors (optional)",
+        placeholder="Dimir, blue-black, U B, or leave blank",
+    )
+with set_col3:
+    deck_format = st.selectbox(
+        "Format",
+        ["Standard", "Modern", "Commander", "Pioneer", "Legacy", "Vintage", "Pauper"],
     )
 
-    # Count all the cards in the deck
-    total_cards = sum(card["qty"] for card in cards)
+# Accept user input (pinned at bottom like Gemini)
+prompt = st.chat_input("Describe the deck you want, or how to adjust it...")
 
+if prompt:
+    st.session_state.messages.append({"role": "user", "content": prompt})
+
+# Use a Gemini-style split layout (Chat on left, Deck Canvas on right) once a deck exists
+if st.session_state["deck"] is not None or prompt:
+    chat_col, deck_col = st.columns([1.05, 1.15], gap="large")
+else:
+    chat_col = st.container()
+    deck_col = None
+
+with chat_col:
+    chat_box = st.container(height=600, border=False)
+    with chat_box:
+        if not st.session_state.messages:
+            st.caption("Tell Rocky what kind of Magic deck you want to build, then keep chatting to refine it.")
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+        if prompt:
+            user_prompts = [m["content"] for m in st.session_state.messages if m["role"] == "user"]
+            combined_strategy = user_prompts[0]
+            if len(user_prompts) > 1:
+                combined_strategy += ". Adjustments: " + "; ".join(user_prompts[1:])
+
+            with st.chat_message("assistant"):
+                try:
+                    with st.spinner(""):
+                        result = get_recommendations(
+                            combined_strategy,
+                            format=deck_format,
+                            colors=colors,
+                        )
+
+                    st.session_state["deck"] = {
+                        "name": deck_name.strip() or "Untitled Deck",
+                        "colors": ", ".join(result["colors"]),
+                        "format": deck_format,
+                        "strategy": result["strategy"],
+                        "cards": result["cards"],
+                    }
+                    response = result["strategy"]
+                    st.markdown(response)
+                except (ValueError, RuntimeError, requests.RequestException, pymongo.errors.PyMongoError) as error:
+                    response = f"Could not generate deck: {error}"
+                    st.error(response)
+
+            st.session_state.messages.append({"role": "assistant", "content": response})
+
+# Deck Canvas panel on the right (no duplicate strategy/metadata repetition)
+if deck_col is not None and st.session_state["deck"] is not None:
+    deck = st.session_state["deck"]
+    if deck_name.strip():
+        deck["name"] = deck_name.strip()
+    cards = deck["cards"]
+    total_cards = sum(card["qty"] for card in cards)
     owned_counts = load_owned_counts()
     owned_copies, _ = deck_owned_summary(owned_counts, cards)
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Cards", total_cards)
-    with col2:
-        st.metric("Unique Cards", len(cards))
-    with col3:
-        st.metric("In Your Collection", f"{owned_copies} / {total_cards}")
-
-    # Add cards to the deck
-    st.subheader("Add Cards")
-
-    with st.form("add_card_form", clear_on_submit=True):
-        card_name = st.text_input("Card Name")
-        add_card = st.form_submit_button("Add Card")
-
-    if add_card:
-        card_name = card_name.strip()
-        if card_name == "":
-            st.warning("Please enter a card name")
-        else:
-            found = False
-            for card in cards:
-                if card["name"].lower() == card_name.lower():
-                    card["qty"] += 1
-                    found = True
-                    break
-            if not found:
-                cards.append({"name": card_name, "qty": 1})
-            st.rerun()
-
-    # Show cards with quantity buttons
-    st.subheader("Manage Deck Cards")
-
-    if len(cards) == 0:
-        st.info("No cards added yet")
-
-    for i, card in enumerate(cards):
-        attach_card_image(card)
-        image_url = get_card_image_url(card)
-        col1, col2, col3, col4, col5, col6 = st.columns([1.2, 4, 0.8, 0.8, 0.8, 1.5])
-
-        #card image
-        with col1:
-            if image_url:
-                st.image(image_url, width=100)
-            else:
-                st.write("No image available")
-        #card name
-        with col2:
-            st.write(card["name"])
-            caption_parts = []
-            if card.get("role"):
-                caption_parts.append(card["role"].capitalize())
-            if card.get("popularity_rank"):
-                caption_parts.append(f"Popularity Rank #{card['popularity_rank']:,}")
-            if caption_parts:
-                st.caption(" · ".join(caption_parts))
-            owned_badge(owned_counts, card["name"], needed=card["qty"])
-
-        #decrease quantity button
-        with col3:
-            if st.button("-", key=f"minus_{i}", disabled=card["qty"] <= 1):
-                card["qty"] -= 1
-                st.rerun()
-
-        #current quantity
-        with col4:
-            st.write(card["qty"])
-
-        #increase quantity button
-        with col5:
-            if st.button("+", key=f"plus_{i}"):
-                card["qty"] += 1
-                st.rerun()
-
-        #remove card button
-        with col6:
-            if st.button("Remove", key=f"remove_{i}"):
-                cards.pop(i)
-                st.rerun()
-
-    # Save the deck to MongoDB
     user_id = st.session_state.get("user_id")
 
-    if not user_id:
-        st.info("Log in to save this deck to your account.")
-        st.page_link("login.py", label="Log In / Register", icon=":material/person:")
-
-    if st.button("Save Deck", disabled=not user_id):
-        if len(cards) == 0:
-            st.warning("Add some cards before saving")
-        else:
-            try:
-                # If this deck was already saved, update it instead of creating a duplicate.
-                updated = deck.get("saved_id") and udb.update_deck(
-                    deck["saved_id"],
-                    user_id,
-                    name=deck["name"],
-                    deck_format=deck["format"],
-                    colors=deck["colors"],
-                    strategy=deck["strategy"],
-                    deck_cards=cards,
+    with deck_col:
+        with st.container(border=True):
+            # Header row: deck title + quick actions
+            hdr_left, hdr_right = st.columns([2.2, 1.8])
+            with hdr_left:
+                st.subheader(deck["name"])
+                st.caption(
+                    f"{deck['format']} · {deck['colors'] or 'Colorless'} · "
+                    f"{total_cards} cards ({len(cards)} unique) · "
+                    f"Owned {owned_copies}/{total_cards}"
                 )
-                if updated:
-                    st.success("Deck updated!")
-                else:
-                    deck["saved_id"] = udb.save_deck(
-                        name=deck["name"],
-                        deck_format=deck["format"],
-                        colors=deck["colors"],
-                        strategy=deck["strategy"],
-                        deck_cards=cards,
-                        user_id=user_id,
+            with hdr_right:
+                btn_col1, btn_col2 = st.columns(2)
+                with btn_col1:
+                    save_clicked = st.button(
+                        "Save",
+                        type="primary",
+                        use_container_width=True,
+                        disabled=not user_id,
                     )
-                    st.success("Deck saved successfully!")
-            except (pymongo.errors.PyMongoError, RuntimeError, ValueError) as error:
-                st.error(f"Could not save deck: {error}")
+                with btn_col2:
+                    st.download_button(
+                        "Export",
+                        "\n".join(f"{c['qty']} {c['name']}" for c in cards),
+                        file_name=f"{deck['name'].lower().replace(' ', '_')}.txt",
+                        mime="text/plain",
+                        use_container_width=True,
+                    )
+
+            if not user_id:
+                st.page_link("login.py", label="Log in to save decks", icon=":material/person:")
+
+            if save_clicked:
+                if len(cards) == 0:
+                    st.warning("Add some cards before saving")
+                else:
+                    try:
+                        updated = deck.get("saved_id") and udb.update_deck(
+                            deck["saved_id"],
+                            user_id,
+                            name=deck["name"],
+                            deck_format=deck["format"],
+                            colors=deck["colors"],
+                            strategy=deck["strategy"],
+                            deck_cards=cards,
+                            tags=deck.get("tags", []),
+                        )
+                        if updated:
+                            st.success("Deck updated!")
+                        else:
+                            deck["saved_id"] = udb.save_deck(
+                                name=deck["name"],
+                                deck_format=deck["format"],
+                                colors=deck["colors"],
+                                strategy=deck["strategy"],
+                                deck_cards=cards,
+                                tags=deck.get("tags", []),
+                                user_id=user_id,
+                            )
+                            st.success("Deck saved!")
+                    except (pymongo.errors.PyMongoError, RuntimeError, ValueError) as error:
+                        st.error(f"Could not save deck: {error}")
+
+            # Compact inline Add Card form
+            with st.form("add_card_form", clear_on_submit=True):
+                add_col1, add_col2 = st.columns([3.5, 1])
+                with add_col1:
+                    card_name = st.text_input(
+                        "Add a card",
+                        placeholder="Add card by name…",
+                        label_visibility="collapsed",
+                    )
+                with add_col2:
+                    add_card = st.form_submit_button("Add", use_container_width=True)
+
+            if add_card:
+                card_name = card_name.strip()
+                if card_name == "":
+                    st.warning("Please enter a card name")
+                else:
+                    found = False
+                    for card in cards:
+                        if card["name"].lower() == card_name.lower():
+                            card["qty"] += 1
+                            found = True
+                            break
+                    if not found:
+                        cards.append({"name": card_name, "qty": 1})
+                    st.rerun()
+
+            # Scrollable card list inside the deck panel
+            cards_box = st.container(height=440, border=False)
+            with cards_box:
+                if len(cards) == 0:
+                    st.info("No cards added yet")
+
+                for i, card in enumerate(cards):
+                    attach_card_image(card)
+                    image_url = get_card_image_url(card)
+                    c1, c2, c3, c4, c5, c6 = st.columns([1, 3.6, 0.7, 0.6, 0.7, 0.7])
+
+                    with c1:
+                        if image_url:
+                            st.image(image_url, width=64)
+                        else:
+                            st.caption("—")
+                    with c2:
+                        st.markdown(f"**{card['name']}**")
+                        caption_parts = []
+                        if card.get("role"):
+                            caption_parts.append(card["role"].capitalize())
+                        if card.get("popularity_rank"):
+                            caption_parts.append(f"#{card['popularity_rank']:,}")
+                        if caption_parts:
+                            st.caption(" · ".join(caption_parts))
+                        owned_badge(owned_counts, card["name"], needed=card["qty"])
+                    with c3:
+                        if st.button("−", key=f"minus_{i}", disabled=card["qty"] <= 1):
+                            card["qty"] -= 1
+                            st.rerun()
+                    with c4:
+                        st.markdown(f"**{card['qty']}**")
+                    with c5:
+                        if st.button("+", key=f"plus_{i}"):
+                            card["qty"] += 1
+                            st.rerun()
+                    with c6:
+                        if st.button("✕", key=f"remove_{i}"):
+                            cards.pop(i)
+                            st.rerun()

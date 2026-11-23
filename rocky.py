@@ -210,3 +210,84 @@ def ask_rocky_json(prompt, model=None, headers=None, max_completion_tokens=6144)
         raise ValueError("Response JSON must contain 'query' and 'output' keys.")
 
     return data
+
+
+def stream_rocky_chat(
+    messages,
+    model=None,
+    headers=None,
+    instructions=None,
+    max_completion_tokens=4096,
+):
+    """Yield streaming text chunks from Rocky's /v1/responses endpoint for st.write_stream."""
+    req_headers = _get_rocky_headers(headers)
+    target_model = model or get_model(req_headers)
+    token_budget = max(4096, min(max_completion_tokens, 8192))
+
+    system_instructions = instructions or (
+        "You are Card Shark, a helpful Magic: The Gathering deck-building assistant powered by Rocky. "
+        "Help the user brainstorm decks, explain card synergies, and refine strategies clearly and concisely."
+    )
+
+    conversation = "\n".join(
+        f"{m['role'].capitalize()}: {m['content']}"
+        for m in messages
+        if isinstance(m, dict) and m.get("content")
+    )
+
+    payload = {
+        "model": target_model,
+        "instructions": system_instructions,
+        "input": conversation,
+        "max_output_tokens": token_budget,
+        "stream": True,
+        "store": False,
+    }
+
+    with requests.post(
+        ROCKY_RESPONSES_URL,
+        headers=req_headers,
+        json=payload,
+        stream=True,
+        timeout=(15, 240),
+    ) as response:
+        response.raise_for_status()
+        content_type = response.headers.get("Content-Type", "")
+        if "text/event-stream" not in content_type:
+            text = _extract_response_text(response.json())
+            if text:
+                yield text
+            return
+
+        yielded_any = False
+        completed_payload = None
+
+        for raw_line in response.iter_lines(decode_unicode=True):
+            if not raw_line:
+                continue
+            line = raw_line.strip()
+            if not line.startswith("data:"):
+                continue
+            data_str = line[5:].strip()
+            if not data_str or data_str == "[DONE]":
+                continue
+            try:
+                evt = json.loads(data_str)
+            except ValueError:
+                continue
+            if not isinstance(evt, dict):
+                continue
+
+            evt_type = evt.get("type", "")
+            if evt_type == "response.output_text.delta" and isinstance(evt.get("delta"), str):
+                yielded_any = True
+                yield evt["delta"]
+            elif evt_type in ("response.completed", "response.done", "response.incomplete") and isinstance(evt.get("response"), dict):
+                completed_payload = evt["response"]
+            elif "output" in evt or "output_text" in evt:
+                completed_payload = evt
+
+        if not yielded_any and completed_payload:
+            extracted = _extract_response_text(completed_payload)
+            if extracted:
+                yield extracted
