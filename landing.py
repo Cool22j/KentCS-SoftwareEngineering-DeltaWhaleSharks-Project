@@ -137,10 +137,10 @@ with col2:
             st.switch_page("inventory.py")
 
     with st.container(border = True):
-        st.markdown("### Beginner's Guide")
-        st.caption("Learn the basics of MTG and deck building.")
-        if st.button("Get Started", key = "shortcut_beginner", use_container_width = True):
-            st.switch_page("beginner.py")
+        st.markdown("### Card Collection")
+        st.caption("Explore and manage your Magic card collection.")
+        if st.button("Get Started", key = "shortcut_collection", use_container_width = True):
+            st.switch_page("collection.py")
 
 # This section displays the heading and description at the bottom of the landing page.
 st.divider()
