@@ -1,3 +1,5 @@
+import base64
+from pathlib import Path
 import streamlit as st
 import pymongo
 import requests
@@ -52,6 +54,18 @@ def attach_card_image(card):
             card["card_faces"] = result.get("card_faces")
             break
     return card
+
+
+@st.cache_data
+def _spinner_video_html():
+    video_path = Path(__file__).parent / "0000-0018.mp4"
+    video_data = base64.b64encode(video_path.read_bytes()).decode("utf-8")
+    return (
+        '<video autoplay loop muted playsinline '
+        'style="width:96px; height:auto; margin-top:-20px; border-radius:8px; display:block;">'
+        f'<source src="data:video/mp4;base64,{video_data}" type="video/mp4">'
+        "</video>"
+    )
 
 
 st.title("MTG Deck Builder")
@@ -113,13 +127,15 @@ with chat_col:
                 combined_strategy += ". Adjustments: " + "; ".join(user_prompts[1:])
 
             with st.chat_message("assistant"):
+                loader = st.empty()
+                loader.markdown(_spinner_video_html(), unsafe_allow_html=True)
                 try:
-                    with st.spinner(""):
-                        result = get_recommendations(
-                            combined_strategy,
-                            format=deck_format,
-                            colors=colors,
-                        )
+                    result = get_recommendations(
+                        combined_strategy,
+                        format=deck_format,
+                        colors=colors,
+                    )
+                    loader.empty()
 
                     st.session_state["deck"] = {
                         "name": deck_name.strip() or "Untitled Deck",
@@ -131,6 +147,7 @@ with chat_col:
                     response = result["strategy"]
                     st.markdown(response)
                 except (ValueError, RuntimeError, requests.RequestException, pymongo.errors.PyMongoError) as error:
+                    loader.empty()
                     response = f"Could not generate deck: {error}"
                     st.error(response)
 
